@@ -1,7 +1,7 @@
 #! /usr/bin/python
 # hashpw -- prompts user for a password and prints the hash
 #
-# Version: 2.1
+# Version: 2.2.0
 # Copyright: (C) 2013 Alastair Irvine <alastair@plug.org.au>
 # Keywords: security passwd crypt
 # Licence: This file is released under the GNU General Public License
@@ -25,13 +25,12 @@ Algorithm options:
   -o  MySQL OLD_PASSWORD() custom algorithm*** (does not use a salt; INSECURE!!)
   -p  MySQL v4.1+ PASSWORD() double SHA-1 (does not use a salt; INSECURE!!)
   -M  MySQL MD5() -- just hex encoding (does not use a salt; INSECURE!!)
-  -P  phpass** (Portable PHP password hashing framework), as used by WordPress
+  -P  Portable PHP password hashing framework, as used by WordPress
   -B  phpBB3: Same as -P except the hash starts with "$H$" instead of "$P$"
   -C  CRAM-MD5 (does not use a salt; INSECURE!!)
   -D  DIGEST-MD5 (requires username)
   -s  SCRAM-SHA-1 (RFC 5802; see https://en.wikipedia.org/wiki/Salted_Challenge_Response_Authentication_Mechanism)
 * requires 'pyapache' from https://github.com/mcrute/pyapache
-** requires 'phpass' from https://github.com/exavolt/python-phpass
 *** requires the script from http://djangosnippets.org/snippets/1508"""
 #
 # Requires Python 2.4 for random.SystemRandom
@@ -207,7 +206,7 @@ class SaltedAlgorithm(Algorithm):
 
     @staticmethod
     def generate_salt(c):
-        """Calculates an encoded salt string, including prefix, for algorithm @p c .
+        """Calculate an encoded salt string, including prefix, for algorithm @p c .
         Note that blowfish supports up to a 22-character salt, but only 16 is provided
         by this method."""
 
@@ -216,6 +215,18 @@ class SaltedAlgorithm(Algorithm):
         # by the correct markers
         rand_bits = struct.pack('<QQ', c.r.getrandbits(48), c.r.getrandbits(48))[:12]
         salt = c.prefix + base64encode(rand_bits)[:c.salt_length] + c.suffix
+
+        return salt
+
+
+    @staticmethod
+    def generate_raw_salt(c):
+        """Calculate a base64-encoded salt string."""
+
+        # make a salt consisting of 96 bits of random data, packed into a
+        # string, encoded using a variant of base-64 encoding
+        rand_bits = struct.pack('<QQ', c.r.getrandbits(48), c.r.getrandbits(48))[:12]
+        salt = base64encode(rand_bits)
 
         return salt
 
@@ -363,6 +374,32 @@ class Blowfish(SaltedAlgorithm):
     salt_length = 16
 
 
+    @staticmethod
+    def final_prep(c):
+        """[Override]"""
+        c.rounds=13
+
+        # Pass it up the hierarchy
+        SaltedAlgorithm.final_prep(SaltedAlgorithm)
+
+        global bcrypt
+        import bcrypt
+
+
+    ## def __init__(self, salt):
+    ##     super(Phpass,self).__init__(salt)
+
+
+    def hash(self, plaintext):
+        return bcrypt.hashpw(plaintext, self.salt)
+
+
+    @staticmethod
+    def generate_salt(c):
+        """Calculates an encoded salt string, including prefix, for this algorithm."""
+        return bcrypt.gensalt(log_rounds=c.rounds)
+
+
 
 class SHA256(SaltedAlgorithm):
     name = "sha-256"
@@ -465,17 +502,22 @@ class Phpass(SaltedAlgorithm):
     @staticmethod
     def final_prep(c):
         """[Override]"""
+        c.rounds=17
+        ## c.round_id_chars = "23456789ABCDEFGHIJKLMNOP"
+        ## c.round_id_chars = "789ABCDEFGHIJKLMNOPQRSTU"
 
         # Pass it up the hierarchy
         SaltedAlgorithm.final_prep(SaltedAlgorithm)
 
-        ## print "Phpass.final_prep()..."
-        import phpass
-        c.phpass_hasher = phpass.PasswordHash(iteration_count_log2=14)
+        global passlib
+        import passlib.hash
+        import passlib.utils.binary
 
 
-    ## def __init__(self, salt):
-    ##     super(Phpass,self).__init__(salt)
+    def __init__(self, salt):
+        super(Phpass,self).__init__(salt)
+
+        self.hasher = passlib.hash.phpass.using(salt=self.salt[4:], rounds=self.rounds)
 
 
     def hash(self, plaintext):
@@ -483,13 +525,16 @@ class Phpass(SaltedAlgorithm):
         own salt.  Instead, use the internal function that is used when
         PasswordHash.portable_hashes is true."""
         
-        return self.phpass_hasher.crypt_private(plaintext, self.salt)
+        return self.hasher.hash(plaintext)
 
 
     @staticmethod
     def generate_salt(c):
         """Calculates an encoded salt string, including prefix, for this algorithm."""
-        return c.phpass_hasher.gensalt_private(c.phpass_hasher.get_random_bytes(6))
+        salt_chars = SaltedAlgorithm.generate_raw_salt(SaltedAlgorithm)[0:8]
+        round_char = passlib.utils.binary.h64.encode_int6(c.rounds).decode("ascii")
+        s = c.prefix + round_char + salt_chars
+        return s
 
 
 
@@ -640,15 +685,20 @@ def main():
         barf("Verify mode requires a full hash to check against", 3)
 
     # == processing ==
-    # get two password(s)
-    pw1 = getpass.getpass()
-    if not settings['verify']:
-        pw2 = getpass.getpass("Re-enter password: ")
-        # compare them and if they don't match, report an error
-        if pw1 != pw2:
-            barf("Passwords do not match", 5)
-        else:
-            if pw1 == "": print >> sys.stderr, program_name + ":", "warning: password is blank!!"
+    try:
+        # get two password(s)
+        pw1 = getpass.getpass()
+        if not settings['verify']:
+            pw2 = getpass.getpass("Re-enter password: ")
+            # compare them and if they don't match, report an error
+            if pw1 != pw2:
+                barf("Passwords do not match", 5)
+            else:
+                if pw1 == "":
+                    print >> sys.stderr, program_name + ":", "warning: password is blank!!"
+    except KeyboardInterrupt:
+        print >> sys.stderr, "^C"
+        sys.exit(0)
 
     # hash password
     try:
