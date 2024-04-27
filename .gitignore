@@ -107,15 +107,8 @@ ENV/
 # mypy
 .mypy_cache/
 
-# Project-specific data files
-weights.tar.bz2
+# IDE settings
+.vscode/
 
-# Other
-\#*\#
-.*.sw?
-.sw?
-## *.desktop
-*.old
-*.bak
-.~lock.*#
-*~
+# Project-specific data files
+/tmp

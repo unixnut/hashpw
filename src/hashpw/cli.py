@@ -1,12 +1,12 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 # hashpw -- prompts user for a password and prints the hash
 #
-# Version: 2.2.0
+__version__ = '2.2.0'
 # Copyright: (C) 2013 Alastair Irvine <alastair@plug.org.au>
 # Keywords: security passwd crypt
 # Licence: This file is released under the GNU General Public License
 #
-usage = """Usage: hashpw [ -c | -C | -m | -a | -A | -b | -2 [ -l ] | -5 [ -l ] | -S | -p | -M ] [ <salt> | -v [ -q ] <hash> ]
+usage = """Usage: hashpw [ -c | -C | -m | -a | -A | -b | -2 [ -l ] | -5 [ -l ] | -S | -p | -d [ -l ] | -M ] [ <salt> | -v [ -q ] <hash> ]
   -l  Force a salt of length 16 to be used with SHA-256 or SHA-512
   -e  Also prefix the hash with the scheme prefix used by "doveadm pw"
   -v  Verify instead of printing a hash
@@ -16,28 +16,25 @@ Algorithm options:
   -m  MD5 (default)
   -c  crypt (DES), with a two character salt
   -x  Extended DES, with a nine character salt (FreeBSD 4.x and NetBSD only)
-  -b  blowfish (OpenBSD only)
-  -a  Apache MD5*
+  -b  blowfish
+  -a  Apache MD5
   -A  Apache SHA-1 (RFC 2307; can be used by OpenLDAP) (does not use a salt; INSECURE!!)
   -2  SHA-256
   -5  SHA-512 (Linux standard password hashing method)
   -S  SSHA (used by OpenLDAP)
-  -o  MySQL OLD_PASSWORD() custom algorithm*** (does not use a salt; INSECURE!!)
+  -o  MySQL OLD_PASSWORD() (does not use a salt; INSECURE!!)
   -p  MySQL v4.1+ PASSWORD() double SHA-1 (does not use a salt; INSECURE!!)
   -M  MySQL MD5() -- just hex encoding (does not use a salt; INSECURE!!)
+  -d  PBKDF2 with Django prefix
   -P  Portable PHP password hashing framework, as used by WordPress
   -B  phpBB3: Same as -P except the hash starts with "$H$" instead of "$P$"
   -C  CRAM-MD5 (does not use a salt; INSECURE!!)
   -D  DIGEST-MD5 (requires username)
   -s  SCRAM-SHA-1 (RFC 5802; see https://en.wikipedia.org/wiki/Salted_Challenge_Response_Authentication_Mechanism)
-* requires 'pyapache' from https://github.com/mcrute/pyapache
-*** requires the script from http://djangosnippets.org/snippets/1508"""
-#
-# Requires Python 2.4 for random.SystemRandom
-# Unless using Python 2.5 or later, requires http://pypi.python.org/pypi/hashlib (built into Python 2.5)
+"""
 #
 # See http://forum.insidepro.com/viewtopic.php?t=8225 for more algorithms
-# 
+#
 #
 # Licence details:
 #     This program is free software; you can redistribute it and/or modify
@@ -45,39 +42,11 @@ Algorithm options:
 #     the Free Software Foundation; either version 2 of the License, or (at
 #     your option) any later version.
 #
-#     See http://www.gnu.org/licenses/gpl-2.0.html for more information.
+#     See https://www.gnu.org/licenses/gpl-3.0.html for more information.
 #
 #     You can find the complete text of the GPLv2 in the file
-#     /usr/share/common-licenses/GPL-2 on Debian systems.
-#     Or see the file COPYING in the same directory as this program.
-#
-#
-# TO-DO:
-#   + if the prefix matches but the salt is too short, report an error
-#   + other options for bcrypt (Phpass) using one of the following:
-#       - http://www.mindrot.org/projects/py-bcrypt/
-#       - http://packages.python.org/passlib/
-#   + support Drupal 7's SHA-512-based secure hash (hash type identifier = "$S$")
-#   + support Password-Based Key Derivation Function 2 <https://en.wikipedia.org/wiki/PBKDF2>
-#       - http://csrc.nist.gov/publications/nistpubs/800-132/nist-sp800-132.pdf 
-#       - $pdkdf2$ (SHA-1)
-#       - $pdkdf2-sha256$ (SHA-256)
-#       - $pdkdf2-sha512$ (SHA-512)
-#   + support phpBB3: copy -P (hash type identifier = "$H$")
-#   + handle http://en.wikipedia.org/wiki/Crypt_(Unix)#Blowfish-based_scheme
-#   + convert to a module
-#   + for Blowfish, recognise "$2y$" and provide an option to use it.
-#       - see CRYPT_BLOWFISH comments at http://www.php.net/manual/en/function.crypt.php
-#   + support scrypt <https://en.wikipedia.org/wiki/Scrypt>
-#   + option to generate/recognise simple hashes (e.g. BasicMD5, OldPassword) with prefixes
-#   + accept password on standard input (without confirmation)
-#   + activate settings['long_salt'] if a long salt (or hash with long salt) is provided on the command line
-#   + implement -C
-#   + implement -D
-#   + implement -e
-#   + support "doveadm pw" encoding scheme suffixes (.b64, .base64 and .hex); see 
-#     http://wiki2.dovecot.org/Authentication/PasswordSchemes
-#   + support Argon2i password hashing algorithm: https://wiki.php.net/rfc/argon2_password_hash
+#     /usr/share/common-licenses/GPL-3 on Debian systems.
+#     Or see the file LICENSE in the same directory as this program.
 
 import sys
 import base64
@@ -89,7 +58,26 @@ import crypt
 import getopt
 import hashlib
 
+import passlib.hash
+import passlib.utils.binary
+import passlib.utils
+
+
 program_name = "hashpw"
+
+EXIT_OK = 0
+EXIT_CMDLINE_BAD = 1
+EXIT_VERIFY_FAILED = 2
+EXIT_VERIFY_PARTIAL_HASH = 3
+EXIT_VERIFY_NO_SALT = 4
+EXIT_PASSWORD_MISMATCH = 5
+EXIT_SHORT_SALT = 7
+EXIT_SALT_PREFIX = 8
+EXIT_BAD_ALG = 10
+EXIT_MISSING_HANDLER = 11
+EXIT_MULTIPLE_MODES = 13
+EXIT_MISSING_MODE = 14
+
 DEFAULT_MODE = "md5"
 
 # Defaults that can be modified on the command line
@@ -100,12 +88,12 @@ alg_class = None    # this will be determined by scanning properties of the clas
 # == general-purpose functions ==
 def barf(msg, exitstatus):
     "Shows an error message to stderr and exits with a given value"
-    print >> sys.stderr, program_name + ":", msg
+    print(program_name + ":", msg, file=sys.stderr)
     sys.exit(exitstatus)
 
 
 def help():
-    print usage
+    print(usage)
 
 
 # *** Processing code ***
@@ -131,6 +119,8 @@ class Algorithm(object):
 
     @staticmethod
     def init(c):
+        """Called by the top level, regardless of whether the class is
+        instantiated."""
         pass
 
 
@@ -139,7 +129,7 @@ class Algorithm(object):
         """Called by the constructor, i.e. only if the algorithm class is
         actually going to be used.  Initialises things in the class that are
         used by various static helper methods.
-        
+
         Designed to be overridden.  Subclasses should call this method on their
         superclass, but beware that if that superclass inherits final_prep(), its
         class object is still where attributes will be set."""
@@ -164,6 +154,7 @@ class Algorithm(object):
 
 class SaltedAlgorithm(Algorithm):
     """Stores a salt, which includes the prefix."""
+
     supports_salt = True
     r = random.SystemRandom()
 
@@ -176,7 +167,7 @@ class SaltedAlgorithm(Algorithm):
     def __init__(self, salt):
         # Note that unlike SaltedAlgorithm, Algorithm's constructor doesn't take
         # an argument
-        super(SaltedAlgorithm,self).__init__()
+        super().__init__()
 
         if salt:
             self.salt = self.extract_salt(self, salt)
@@ -264,6 +255,8 @@ class SaltedAlgorithm(Algorithm):
 
 
 class BinarySaltedAlgorithm(SaltedAlgorithm):
+    """For algorithms that use binary salts."""
+
     @staticmethod
     def init(c):
         """Ensure that check_salt() checks the length of the whole hash."""
@@ -294,6 +287,25 @@ class BinarySaltedAlgorithm(SaltedAlgorithm):
         return bits[c.digest_length:]
 
 
+class PLSaltedAlgorithm(SaltedAlgorithm):
+    """
+    Specific class for algorithms that use passlib.
+
+    Class is required to set `self.hasher` in `__init__()`. 
+    """
+
+    def hash(self, plaintext):
+        """
+        Make a hash using 'passlib' (unlike parent that uses 'crypt').
+
+        Doesn't use PasswordHash.hash_password() because that generates its
+        own salt.  Instead, use the internal function that is used when
+        PasswordHash.portable_hashes is true.
+        """
+
+        return self.hasher.hash(plaintext)
+
+
 
 class Crypt(SaltedAlgorithm):
     name = "crypt"
@@ -309,18 +321,19 @@ class Crypt(SaltedAlgorithm):
         return len(s) == c.min_length
 
 
+
 class ExtDes(SaltedAlgorithm):
     name = "ext-des"
     option = "x"
-    prefix = ""
+    prefix = "_"
     suffix = ""
-    min_length = 0
-    salt_length = 9
+    min_length = 20
+    salt_length = 8
 
 
-    @staticmethod
-    def recognise_salt(c, s):
-        return False
+    ## @staticmethod
+    ## def recognise_salt(c, s):
+    ##     return False
 
 
 
@@ -334,7 +347,7 @@ class MD5(SaltedAlgorithm):
 
 
 
-class ApacheMD5(SaltedAlgorithm):
+class ApacheMD5(PLSaltedAlgorithm):
     name = "apache-md5"
     option = "a"
     prefix = "$apr1$"
@@ -343,10 +356,10 @@ class ApacheMD5(SaltedAlgorithm):
     salt_length = 8
 
 
-    def hash(self, plaintext):
-        # http://mike.crute.org/blog/2008/07/12/python-apache-library-plus-htaccess/
-        import pyapache.md5
-        return pyapache.md5.generate_md5(plaintext, self.salt[6:14])
+    def __init__(self, salt):
+        super().__init__(salt)
+
+        self.hasher = passlib.hash.apr_md5_crypt.using(salt=self.salt[6:])
 
 
 
@@ -359,7 +372,9 @@ class ApacheSHA1(Algorithm):
 
 
     def hash(self, plaintext):
-        return self.prefix + base64encode(hashlib.sha1(plaintext).digest())
+        input_byte_str = plaintext.encode("UTF-8")
+        round_output = hashlib.sha1(input_byte_str).digest()
+        return self.prefix + base64encode(round_output)
 
 
 
@@ -380,14 +395,14 @@ class Blowfish(SaltedAlgorithm):
         c.rounds=13
 
         # Pass it up the hierarchy
-        SaltedAlgorithm.final_prep(SaltedAlgorithm)
+        SaltedAlgorithm.final_prep(c)
 
         global bcrypt
         import bcrypt
 
 
     ## def __init__(self, salt):
-    ##     super(Phpass,self).__init__(salt)
+    ##     super().__init__(salt)
 
 
     def hash(self, plaintext):
@@ -448,12 +463,16 @@ class MySqlSHA1(Algorithm):
 
 
     def hash(self, plaintext):
-        return "*" + binascii.hexlify(hashlib.sha1(hashlib.sha1(plaintext).digest()).digest()).upper()
+        input_byte_str = plaintext.encode("UTF-8")
+        first_round_output = hashlib.sha1(input_byte_str).digest()
+        second_round_output = hashlib.sha1(first_round_output).digest()
+        output_byte_str = binascii.hexlify(second_round_output)
+        return "*" + output_byte_str.decode('ascii').upper()
 
 
 class OldPassword(Algorithm):
-    """Pre-v4.1 MySQL, and also newer with the INSERTNAMEHERE setting on
-    
+    """Pre-v4.1 MySQL, and also newer with the 'old-passwords' setting on
+
     http://djangosnippets.org/snippets/1508/"""
     name = "old-password"
     option = "o"
@@ -462,13 +481,22 @@ class OldPassword(Algorithm):
     min_length = 16
 
 
+    @staticmethod
+    def final_prep(c):
+        """[Override]"""
+        # Pass it up the hierarchy
+        Algorithm.final_prep(Algorithm)
+
+        global mysql_hash_password
+        from hashpw.contrib.tback import mysql_hash_password
+
+
     def recognise(self, s):
         return False
 
 
     def hash(self, plaintext):
-        import old_password
-        return old_password.mysql_hash_password(plaintext)
+        return mysql_hash_password(plaintext)
 
 
 
@@ -482,11 +510,14 @@ class BasicMD5(Algorithm):
 
 
     def hash(self, plaintext):
-        return binascii.hexlify(hashlib.md5(plaintext).digest())
+        input_byte_str = plaintext.encode("UTF-8")
+        first_round_output = hashlib.md5(input_byte_str).digest()
+        output_byte_str = binascii.hexlify(first_round_output)
+        return output_byte_str.decode('ascii')
 
 
 
-class Phpass(SaltedAlgorithm):
+class Phpass(PLSaltedAlgorithm):
     """https://github.com/exavolt/python-phpass
     e.g. portable (safe MD5): $P$Bnvt73R2AZ9NwrY8agFUwI1YUYQEW5/
          Blowfish: $2a$08$iys2/e7hwWyX2YbWtjCyY.tmGy2Y.mGlV9KwIAi9AUPgBuc9rdJVe"""
@@ -507,25 +538,13 @@ class Phpass(SaltedAlgorithm):
         ## c.round_id_chars = "789ABCDEFGHIJKLMNOPQRSTU"
 
         # Pass it up the hierarchy
-        SaltedAlgorithm.final_prep(SaltedAlgorithm)
-
-        global passlib
-        import passlib.hash
-        import passlib.utils.binary
+        SaltedAlgorithm.final_prep(c)
 
 
     def __init__(self, salt):
-        super(Phpass,self).__init__(salt)
+        super().__init__(salt)
 
         self.hasher = passlib.hash.phpass.using(salt=self.salt[4:], rounds=self.rounds)
-
-
-    def hash(self, plaintext):
-        """Doesn't use PasswordHash.hash_password() because that generates its
-        own salt.  Instead, use the internal function that is used when
-        PasswordHash.portable_hashes is true."""
-        
-        return self.hasher.hash(plaintext)
 
 
     @staticmethod
@@ -561,22 +580,27 @@ class SSHA(BinarySaltedAlgorithm):
 
 
     def hash(self, plaintext):
-        context = hashlib.sha1(plaintext)
+        input_byte_str = plaintext.encode("UTF-8")
+        context = hashlib.sha1(input_byte_str )
         context.update(self.salt)
-        return self.prefix + base64encode(context.digest()+self.salt)
+        output_byte_str = context.digest()
+        return self.prefix + base64encode(output_byte_str + self.salt)
 
 
 
+# *** FUNCTIONS ***
 def base64encode(bits):
-    """Returns a base64-encoded string using the standard password alphabet
-    instead of the default or url-safe ones."""
-    return base64.b64encode(bits, './')
+    """
+    Returns a base64-encoded string using the standard password alphabet
+    instead of the default or url-safe ones.
+    """
+    return base64.b64encode(bits, b'./').decode('ascii')
 
 
 def base64decode(hash):
     """Extracts bits from a base64-encoded string using the standard password alphabet
     instead of the default or url-safe ones."""
-    return base64.b64decode(hash, './')
+    return base64.b64decode(hash, b'./')
 
 
 def recognise_algorithm_by_hash(algorithm, s):
@@ -591,10 +615,31 @@ def recognise_algorithm_by_salt(algorithm, s):
         ## return False
 
 
+def create_hasher(alg_class, salt, settings):
+    """
+    Create an object of the algorithm's class, warning if a salt was
+    supplied by the algorithm doesn't support it.
+    """
+
+    if alg_class.supports_salt:
+        return alg_class(salt)
+    else:
+        if salt and not settings['verify']:
+            print("ignoring salt", file=sys.stderr)
+        return alg_class()
+
+
+def make_hash(hasher, s: str):
+    ## plaintext = s.encode("UTF-8")
+
+    return hasher.hash(s)
+
 
 # *** MAINLINE ***
 # == initialisation ==
+# Algorithms with longer prefixes need to appear earlier in this list
 algorithms = (MD5, ApacheMD5, ApacheSHA1, Blowfish, SHA256, SHA512, MySqlSHA1, Phpass, PhpBB3, SSHA, BasicMD5, ExtDes, Crypt, OldPassword)
+## PBKDF2, 
 short_to_long = {}
 opt_string = ""
 alg_names = []
@@ -617,18 +662,18 @@ def main():
     # -- option handling --
     try:
         (opts, args) = getopt.getopt(sys.argv[1:], opt_string + "lvqh", ['help'] + alg_names)
-    except getopt.GetoptError, e:
-        print >> sys.stderr, program_name + ":", e
-        sys.exit(1)
+    except getopt.GetoptError as e:
+        print(program_name + ":", e, file=sys.stderr)
+        sys.exit(EXIT_CMDLINE_BAD)
 
     if ("--help",'') in opts or ("-h",'') in opts:
         help()
-        sys.exit(0)
+        sys.exit(EXIT_OK)
 
     for optpair in opts:
         if len(optpair[0]) == 2 and optpair[0][0] == "-":
             # short option
-            if short_to_long.has_key(optpair[0][1]):
+            if optpair[0][1] in short_to_long:
                 mode = short_to_long[optpair[0][1]]
             elif optpair[0] == "-l":
                 settings['long_salt'] = True
@@ -638,9 +683,9 @@ def main():
                 settings['quiet'] = True
         else:
             # long option
-            if optpair[0][2:] in short_to_long.values():
+            if optpair[0][2:] in list(short_to_long.values()):
                 if mode:
-                    barf("Multiple mode options are not allowed", 13)
+                    barf("Multiple mode options are not allowed", EXIT_MULTIPLE_MODES)
                 mode = optpair[0][2:]
 
     # -- pre-preparation --
@@ -652,6 +697,7 @@ def main():
     # have to do this after option handling but before algorithm recognition
     for a in algorithms:
         a.init(a)
+    alg_class = None
 
     # -- argument handling --
     # handle a salt if one was supplied
@@ -662,27 +708,29 @@ def main():
             for a in algorithms:
                 if recognise_algorithm(a, salt):
                     mode = a.name
+                    alg_class = a
                     break
     else:
         if settings['verify']:
-            barf("Verify mode cannot be used if no salt is supplied", 4)
+            barf("Verify mode cannot be used if no salt is supplied", EXIT_VERIFY_NO_SALT)
         salt = None
 
     # == preparation ==
     if not mode:
         mode = DEFAULT_MODE
 
-    # determine algorithm
-    alg_class = None
-    for a in algorithms:
-        if a.name == mode:
-            alg_class = a
-    if not a:
-        barf("mode " + mode + " not found", 14)
+    if not alg_class:
+        # determine algorithm
+        for a in algorithms:
+            if a.name == mode:
+                alg_class = a
+                break
+        else:
+            barf("mode " + mode + " not found", EXIT_MISSING_MODE)
 
     # == sanity checking ==
     if settings['verify'] and not recognise_algorithm_by_hash(alg_class, salt):
-        barf("Verify mode requires a full hash to check against", 3)
+        barf("Verify mode requires a full hash to check against", EXIT_VERIFY_PARTIAL_HASH)
 
     # == processing ==
     try:
@@ -692,37 +740,33 @@ def main():
             pw2 = getpass.getpass("Re-enter password: ")
             # compare them and if they don't match, report an error
             if pw1 != pw2:
-                barf("Passwords do not match", 5)
+                barf("Passwords do not match", EXIT_PASSWORD_MISMATCH)
             else:
                 if pw1 == "":
-                    print >> sys.stderr, program_name + ":", "warning: password is blank!!"
+                    print(program_name + ":", "warning: password is blank!!", file=sys.stderr)
     except KeyboardInterrupt:
-        print >> sys.stderr, "^C"
-        sys.exit(0)
+        print("^C", file=sys.stderr)
+        sys.exit(EXIT_OK)
 
     # hash password
     try:
-        if alg_class.supports_salt:
-            hasher = alg_class(salt)
-        else:
-            if salt and not settings['verify']: print >> sys.stderr, "ignoring salt"
-            hasher = alg_class()
+        # Don't call this hasher
+        hasher = create_hasher(alg_class, salt, settings)
 
         if not settings['verify']:
-            print hasher.hash(pw1)
+            print(make_hash(hasher, pw1))   ## .decode('ascii'))
         else:
             # verify mode (would have barfed by now if there was no salt)
-            if hasher.hash(pw1) == salt:
+            if make_hash(hasher, pw1) == salt:
                 if not settings['quiet']: print("Verify suceeded.")
             else:
                 if not settings['quiet']: print("Verify failed!")
-                exit(2)       # don't re-use mismatch code
-    except ShortSaltException, e:
-        barf(e, 7)
-    except SaltPrefixException, e:
-        barf(e, 8)
-    except BadAlgException, e:
-        barf(e, 10)
-    except ImportError, e:
-        barf("Cannot find required algorithm handler: %s" % (e,), 11)
-
+                sys.exit(EXIT_VERIFY_FAILED)       # don't re-use mismatch code
+    except ShortSaltException as e:
+        barf(e, EXIT_SHORT_SALT)
+    except SaltPrefixException as e:
+        barf(e, EXIT_SALT_PREFIX)
+    except BadAlgException as e:
+        barf(e, EXIT_BAD_ALG)
+    except ImportError as e:
+        barf("Cannot find required algorithm handler: %s" % (e,), EXIT_MISSING_HANDLER)
