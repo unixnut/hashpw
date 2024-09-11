@@ -8,8 +8,8 @@ class Blowfish(SaltedAlgorithm):
     prefix = "$2a$"
     extra_prefix = "{BLF-CRYPT}"
     suffix = ""
-    min_length = 57
-    salt_length = 16
+    min_length = 60
+    salt_length = 29
 
 
     @classmethod

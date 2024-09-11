@@ -5,11 +5,15 @@
 # Keywords: security passwd crypt
 # Licence: This file is released under the GNU General Public License
 #
-usage = """Usage: hashpw [ -c | -C | -m | -a | -A | -b | -2 [ -l ] | -5 [ -l ] | -S | -p | -d [ -l ] | -M ] [ <salt> | -v [ -q ] <hash> ]
+usage = """Usage: hashpw [ -e ] [ -c | -C | -m | -a | -A | -b | -2 [ -l ] | -5 [ -l ] | -S | -p | -d [ -l ] | -M ] [ <salt> | -v [ -q ] <hash> ]
   -l  Force a salt of length 16 to be used with SHA-256 or SHA-512
   -e  Also prefix the hash with the scheme prefix used by "doveadm pw"
   -v  Verify instead of printing a hash
+  -I  Show information about the selected algorithm instead of printing a hash
   -q  Don't print verification result (exit codes only; 0 = suceeded, 2 = failed)
+  -r <rounds>  Set round count
+  -R <rounds>  Set logarithmic round count
+  -u <username>
 
 Algorithm options:
   -m  MD5 (default)
@@ -24,8 +28,12 @@ Algorithm options:
   -o  MySQL OLD_PASSWORD() (does not use a salt; INSECURE!!)
   -p  MySQL v4.1+ PASSWORD() double SHA-1 (does not use a salt; INSECURE!!)
   -M  MySQL MD5() -- just hex encoding (does not use a salt; INSECURE!!)
+  -d  PBKDF2 with Django prefix
   -P  Portable PHP password hashing framework, as used by WordPress
   -B  phpBB3: Same as -P except the hash starts with "$H$" instead of "$P$"
+  -C  CRAM-MD5 (does not use a salt; INSECURE!!)
+  -D  DIGEST-MD5 (requires username)
+  -s  SCRAM-SHA-1 (RFC 5802; see https://en.wikipedia.org/wiki/Salted_Challenge_Response_Authentication_Mechanism)
 """
 #
 # See http://forum.insidepro.com/viewtopic.php?t=8225 for more algorithms
@@ -47,6 +55,7 @@ import sys
 import collections
 import getopt
 import getpass
+import math
 
 import hashpw       # Top-level module
 from . import errors
@@ -112,6 +121,8 @@ short_to_long = {}
 opt_string = ""
 alg_names = []
 for a in hashpw.algorithms:
+    if a.option in short_to_long:
+        raise errors.LogicException("Short option letter '%s' for %s already used by %s" % (a.option, a.name, short_to_long[a.option]))
     short_to_long[a.option] = a.name
     # build the option sequences
     opt_string += a.option
@@ -129,7 +140,7 @@ def main():
 
     # -- option handling --
     try:
-        (opts, args) = getopt.getopt(sys.argv[1:], opt_string + "lvqh", ['help'] + alg_names)
+        (opts, args) = getopt.getopt(sys.argv[1:], opt_string + "lvqhr:R:Ieu:", ['help', 'rounds:', 'rounds-log:', 'username:'] + alg_names)
     except getopt.GetoptError as e:
         print(program_name + ":", e, file=sys.stderr)
         sys.exit(EXIT_CMDLINE_BAD)
@@ -149,12 +160,20 @@ def main():
                 settings['verify'] = True
             elif optpair[0] == "-q":
                 settings['quiet'] = True
+            elif optpair[0] == "-r":
+                settings['rounds'] = optpair[1]
+            elif optpair[0] == "-R":
+                settings['rounds'] = math.pow(optpair[1], 2)
         else:
             # long option
             if optpair[0][2:] in list(short_to_long.values()):
                 if mode:
                     barf("Multiple mode options are not allowed", EXIT_MULTIPLE_MODES)
                 mode = optpair[0][2:]
+            elif optpair[0][2:] == 'rounds':
+                settings['rounds'] = optpair[1]
+            elif optpair[0][2:] == 'rounds-log':
+                settings['rounds'] = math.pow(optpair[1], 2)
 
     # -- pre-preparation --
     hashpw.init(settings)

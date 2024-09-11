@@ -11,3 +11,7 @@ class SaltPrefixException(Exception):
 
 class BadAlgException(Exception):
     pass
+
+
+class LogicException(Exception):
+    pass

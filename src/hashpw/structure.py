@@ -87,7 +87,7 @@ class SaltedAlgorithm(Algorithm):
     def recognise_salt(c, s):
         """Returns whether or not @p s matches the leading part of this
         algorithm's encoding format and is long enough to contain a salt."""
-        return s[:len(c.prefix)] == c.prefix and len(s) >= c.comp_len
+        return c.recognise_salt_internal(s) and len(s) >= c.comp_len
 
 
     @classmethod
@@ -127,8 +127,11 @@ class SaltedAlgorithm(Algorithm):
 
     @classmethod
     def check_salt(c, salt):
-        """Checks that the supplied salt conforms to the required format of the
-        current mode."""
+        """
+        Checks that the supplied salt conforms to the required format of the
+        current mode.
+        """
+
         # TO-DO: warn if the supplied salt is too long (don't warn on whole password)
         if len(salt) < c.comp_len:
             raise errors.ShortSaltException()
@@ -138,6 +141,7 @@ class SaltedAlgorithm(Algorithm):
 
     def hash(self, plaintext):
         """Returns an encoded hash"""
+
         return_value = crypt.crypt(plaintext, self.salt)
 
         # Check that the hash starts with the salt; otherwise, crypt(3) might

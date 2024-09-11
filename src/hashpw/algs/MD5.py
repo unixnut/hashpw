@@ -3,7 +3,7 @@ from ..structure import SaltedAlgorithm
 
 class MD5(SaltedAlgorithm):
     name = "md5"
-    option = "x"
+    option = "m"
     prefix = "$1$"
     suffix = ""
     min_length = 34
