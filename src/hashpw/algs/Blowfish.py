@@ -1,3 +1,5 @@
+from typing import Set, Dict, Sequence, Tuple, List, Union, AnyStr, Iterable, Callable, Generator, Type, Optional, TextIO, IO
+
 from ..structure import SaltedAlgorithm
 
 
@@ -10,13 +12,18 @@ class Blowfish(SaltedAlgorithm):
     suffix = ""
     min_length = 60
     salt_length = 29
+    rounds_strategy = 'logarithmic'
+
+
+    # This can't be a @classmethod because parent classes have to work with its properties
+    @staticmethod
+    def init(c, **kwargs: Dict):
+        c.set_rounds(13, kwargs)
+        super().init(c, **kwargs)
 
 
     @classmethod
     def final_prep(c):
-        """[Override]"""
-        c.rounds=13
-
         # Pass it up the hierarchy
         SaltedAlgorithm.final_prep()
 

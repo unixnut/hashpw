@@ -2,10 +2,12 @@
                                   
 __author__ = """Alastair Irvine"""
 __email__ = 'alastair@plug.org.au'
-__version__ = '2.4.0'
+__version__ = '2.5.0'
 
 
 from typing import Set, Dict, Sequence, Tuple, List, Union, AnyStr, Iterable, Callable, Generator, Type, Optional, TextIO, IO
+
+import logging
 
 from .algs.ApacheMD5 import ApacheMD5
 from .algs.ApacheSHA1 import ApacheSHA1
@@ -16,7 +18,7 @@ from .algs.ExtDes import ExtDes
 from .algs.MD5 import MD5
 from .algs.MySqlSHA1 import MySqlSHA1
 from .algs.OldPassword import OldPassword
-## from .algs.PBKDF2 import PBKDF2
+from .algs.PBKDF2 import PBKDF2
 from .algs.PhpBB3 import PhpBB3
 from .algs.Phpass import Phpass
 from .algs.SHA256 import SHA256
@@ -26,8 +28,7 @@ from .algs.SSHA import SSHA
 
 # *** DEFINITIONS ***
 # Algorithms with longer prefixes need to appear earlier in this list
-algorithms = (MD5, ApacheMD5, ApacheSHA1, Blowfish, SHA256, SHA512, MySqlSHA1, Phpass, PhpBB3, SSHA, BasicMD5, ExtDes, Crypt, OldPassword)
-## PBKDF2, 
+algorithms = (PBKDF2, MD5, ApacheMD5, ApacheSHA1, Blowfish, SHA256, SHA512, MySqlSHA1, Phpass, PhpBB3, SSHA, BasicMD5, ExtDes, Crypt, OldPassword)
 
 
 # *** FUNCTIONS ***
@@ -64,7 +65,8 @@ def init(settings: Dict):
 
     # have to do this after option handling but before algorithm recognition
     for a in algorithms:
-        a.init(a, long_salt=settings['long_salt'])
+        logging.debug("Initialising algorithm %s", a.name)
+        a.init(a, long_salt=settings['long_salt'], rounds=settings['rounds'])
 
 
 # *** MAINLINE ***

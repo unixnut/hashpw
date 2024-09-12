@@ -14,7 +14,7 @@ class SSHA(BinarySaltedAlgorithm):
     digest_length = 20
 
 
-    def hash(self, plaintext):
+    def hash(self, plaintext: str):
         input_byte_str = plaintext.encode("UTF-8")
         context = hashlib.sha1(input_byte_str )
         context.update(self.salt)

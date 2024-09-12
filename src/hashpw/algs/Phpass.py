@@ -1,7 +1,10 @@
+from typing import Set, Dict, Sequence, Tuple, List, Union, AnyStr, Iterable, Callable, Generator, Type, Optional, TextIO, IO
+
 import passlib.hash
 import passlib.utils.binary
 
 from ..structure import PLSaltedAlgorithm
+from .. import errors
 
 
 class Phpass(PLSaltedAlgorithm):
@@ -15,23 +18,34 @@ class Phpass(PLSaltedAlgorithm):
     suffix = ""
     min_length = 34
     salt_length = 9  # includes the round count
+    rounds_strategy = 'logarithmic'
 
 
-    @classmethod
-    def final_prep(c):
-        """[Override]"""
-        c.rounds=17
-        ## c.round_id_chars = "23456789ABCDEFGHIJKLMNOP"
-        ## c.round_id_chars = "789ABCDEFGHIJKLMNOPQRSTU"
+    # This can't be a @classmethod because parent classes have to work with its properties
+    @staticmethod
+    def init(c, **kwargs: Dict):
+        c.set_rounds(17, kwargs)
+        super().init(c, **kwargs)
 
-        # Pass it up the hierarchy
-        PLSaltedAlgorithm.final_prep()
+
+    ## @classmethod
+    ## def final_prep(c):
+    ##     """[Override]"""
+    ##     c.rounds=17
+    ##     ## c.round_id_chars = "23456789ABCDEFGHIJKLMNOP"
+    ##     ## c.round_id_chars = "789ABCDEFGHIJKLMNOPQRSTU"
+
+    ##     # Pass it up the hierarchy
+    ##     PLSaltedAlgorithm.final_prep()
 
 
     def __init__(self, salt):
         super().__init__(salt)
 
-        self.hasher = passlib.hash.phpass.using(salt=self.salt[4:], rounds=self.rounds)
+        try:
+            self.hasher = passlib.hash.phpass.using(salt=self.salt[4:], rounds=self.rounds)
+        except ValueError as e:
+            raise errors.RoundException("Rounds cannot be more than 30") from e
 
 
     @classmethod

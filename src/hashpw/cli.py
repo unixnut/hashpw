@@ -9,11 +9,10 @@ usage = """Usage: hashpw [ -e ] [ -c | -C | -m | -a | -A | -b | -2 [ -l ] | -5 [
   -l  Force a salt of length 16 to be used with SHA-256 or SHA-512
   -e  Also prefix the hash with the scheme prefix used by "doveadm pw"
   -v  Verify instead of printing a hash
-  -I  Show information about the selected algorithm instead of printing a hash
+  -V  Show program version information
   -q  Don't print verification result (exit codes only; 0 = suceeded, 2 = failed)
   -r <rounds>  Set round count
   -R <rounds>  Set logarithmic round count
-  -u <username>
 
 Algorithm options:
   -m  MD5 (default)
@@ -31,9 +30,6 @@ Algorithm options:
   -d  PBKDF2 with Django prefix
   -P  Portable PHP password hashing framework, as used by WordPress
   -B  phpBB3: Same as -P except the hash starts with "$H$" instead of "$P$"
-  -C  CRAM-MD5 (does not use a salt; INSECURE!!)
-  -D  DIGEST-MD5 (requires username)
-  -s  SCRAM-SHA-1 (RFC 5802; see https://en.wikipedia.org/wiki/Salted_Challenge_Response_Authentication_Mechanism)
 """
 #
 # See http://forum.insidepro.com/viewtopic.php?t=8225 for more algorithms
@@ -55,12 +51,14 @@ import sys
 import collections
 import getopt
 import getpass
+import logging
 import math
 
 import hashpw       # Top-level module
 from . import errors
 
 
+# *** DEFINITIONS ***
 program_name = "hashpw"
 
 EXIT_OK = 0
@@ -75,6 +73,8 @@ EXIT_BAD_ALG = 10
 EXIT_MISSING_HANDLER = 11
 EXIT_MULTIPLE_MODES = 13
 EXIT_MISSING_MODE = 14
+EXIT_ROUNDS = 15
+EXIT_BAD_OPTION = 16
 
 DEFAULT_MODE = "md5"
 
@@ -84,10 +84,12 @@ settings.update({'verify': False, 'quiet': False})
 mode = None
 alg_class = None    # this will be determined by scanning properties of the classes
 
+
+# *** FUNCTIONS ***
 # == general-purpose functions ==
 def barf(msg, exitstatus):
     "Shows an error message to stderr and exits with a given value"
-    print(program_name + ":", msg, file=sys.stderr)
+    print(program_name + ": ERROR:", msg, file=sys.stderr)
     sys.exit(exitstatus)
 
 
@@ -136,14 +138,15 @@ def main():
     global settings
     global mode
     global alg_class
-
+    debug = False
+    special = None
 
     # -- option handling --
     try:
-        (opts, args) = getopt.getopt(sys.argv[1:], opt_string + "lvqhr:R:Ieu:", ['help', 'rounds:', 'rounds-log:', 'username:'] + alg_names)
+        (opts, args) = getopt.getopt(sys.argv[1:], opt_string + "lvqhr:R:Ieu:V",
+                                     ['help', 'rounds:', 'rounds-log:', 'username:', 'debug', 'version'] + alg_names)
     except getopt.GetoptError as e:
-        print(program_name + ":", e, file=sys.stderr)
-        sys.exit(EXIT_CMDLINE_BAD)
+        barf(e, EXIT_CMDLINE_BAD)
 
     if ("--help",'') in opts or ("-h",'') in opts:
         help()
@@ -161,9 +164,13 @@ def main():
             elif optpair[0] == "-q":
                 settings['quiet'] = True
             elif optpair[0] == "-r":
-                settings['rounds'] = optpair[1]
+                settings['rounds'] = int(optpair[1])
             elif optpair[0] == "-R":
-                settings['rounds'] = math.pow(optpair[1], 2)
+                settings['rounds'] = int(math.pow(2, int(optpair[1])))
+            elif optpair[0] == "-V":
+                special = 'version'
+            elif optpair[0] == "-I":
+                special = 'info'
         else:
             # long option
             if optpair[0][2:] in list(short_to_long.values()):
@@ -171,15 +178,35 @@ def main():
                     barf("Multiple mode options are not allowed", EXIT_MULTIPLE_MODES)
                 mode = optpair[0][2:]
             elif optpair[0][2:] == 'rounds':
-                settings['rounds'] = optpair[1]
+                settings['rounds'] = int(optpair[1])
             elif optpair[0][2:] == 'rounds-log':
-                settings['rounds'] = math.pow(optpair[1], 2)
+                settings['rounds'] = int(math.pow(2, int(optpair[1])))
+            elif optpair[0][2:] == 'debug':
+                debug = True
+            elif optpair[0][2:] == 'version':
+                special = 'version'
+            elif optpair[0][2:] == 'info':
+                special = 'info'
 
     # -- pre-preparation --
-    hashpw.init(settings)
+    if debug:
+        ## print('debug mode ON')
+        logging.basicConfig(level=logging.DEBUG)
+    try:
+        hashpw.init(settings)
+    except errors.InvalidArgException as e:
+        barf(str(e), EXIT_CMDLINE_BAD)
     alg_class = None
 
     # -- argument handling --
+    if special:
+        if special == 'version':
+            print(program_name, "v%s" % hashpw.__version__, "by", hashpw.__author__)
+        elif special == 'info':
+            pass
+
+        sys.exit(EXIT_OK)
+
     # handle a salt if one was supplied
     if len(args) > 0:
         salt = args[0]
@@ -210,6 +237,21 @@ def main():
 
     # == processing ==
     try:
+        # Object not function; don't call
+        hasher = create_hasher(alg_class, salt, settings)
+    except errors.ShortSaltException as e:
+        barf(e, EXIT_SHORT_SALT)
+    except errors.SaltPrefixException as e:
+        barf(e, EXIT_SALT_PREFIX)
+    except errors.InvalidArgException as e:
+        barf(e, EXIT_BAD_OPTION)
+    except errors.RoundException as e:
+        barf(e, EXIT_ROUNDS)
+    except ImportError as e:
+        barf("Cannot find required algorithm handler: %s" % (e,), EXIT_MISSING_HANDLER)
+
+    # TODO: Check for stdin not a tty and read that instead
+    try:
         # get two password(s)
         pw1 = getpass.getpass()
         if not settings['verify']:
@@ -226,9 +268,6 @@ def main():
 
     # hash password
     try:
-        # Don't call this hasher
-        hasher = create_hasher(alg_class, salt, settings)
-
         if not settings['verify']:
             print(make_hash(hasher, pw1))   ## .decode('ascii'))
         else:
@@ -238,11 +277,5 @@ def main():
             else:
                 if not settings['quiet']: print("Verify failed!")
                 sys.exit(EXIT_VERIFY_FAILED)       # don't re-use mismatch code
-    except errors.ShortSaltException as e:
-        barf(e, EXIT_SHORT_SALT)
-    except errors.SaltPrefixException as e:
-        barf(e, EXIT_SALT_PREFIX)
     except errors.BadAlgException as e:
         barf(e, EXIT_BAD_ALG)
-    except ImportError as e:
-        barf("Cannot find required algorithm handler: %s" % (e,), EXIT_MISSING_HANDLER)

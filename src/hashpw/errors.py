@@ -15,3 +15,11 @@ class BadAlgException(Exception):
 
 class LogicException(Exception):
     pass
+
+
+class InvalidArgException(Exception):
+    pass
+
+
+class RoundException(Exception):
+    pass

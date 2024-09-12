@@ -1,4 +1,8 @@
+from typing import Set, Dict, Sequence, Tuple, List, Union, AnyStr, Iterable, Callable, Generator, Type, Optional, TextIO, IO
+
 import crypt
+import logging
+import math
 import random
 import struct
 
@@ -8,14 +12,19 @@ from . import utils
 
 class Algorithm(object):
     supports_salt = False
+    rounds_strategy = None
 
 
     # This can't be a @classmethod because it has to work with subclass properties
     @staticmethod
     def init(c, **kwargs):
-        """Called by the top level, regardless of whether the class is
-        instantiated."""
-        pass
+        """
+        Called by the top level, regardless of whether the class is instantiated.
+        """
+
+        # Catch-call in case set_rounds() wasn't called
+        if kwargs.get('rounds', False):
+            c.rounds = -1
 
 
     @classmethod
@@ -31,7 +40,29 @@ class Algorithm(object):
         pass
 
 
+    @classmethod
+    def set_rounds(c, default_rounds: int, extra_args: Dict):
+        try:
+            rounds = extra_args.pop('rounds')
+        except KeyError:
+            rounds = False
+
+        if rounds:
+            if c.rounds_strategy == 'logarithmic':
+                c.rounds = math.ceil(math.log2(rounds))
+            elif c.rounds_strategy == 'numeric':
+                c.rounds = rounds
+            else:
+                # Invalid value that will trip the constructor check
+                c.rounds = -1
+        else:
+            # This will match the rounds_strategy so doesn't need to be converted
+            c.rounds = default_rounds
+
+
     def __init__(self):
+        if not self.rounds_strategy and hasattr(self, 'rounds'):
+            raise errors.InvalidArgException("Algorithm %s doesn't support changing the round count" % self.name)
         self.final_prep()
 
 
@@ -50,12 +81,14 @@ class SaltedAlgorithm(Algorithm):
     """Stores a salt, which includes the prefix."""
 
     supports_salt = True
+    supports_long_salt = False
     r = random.SystemRandom()
 
 
     # This can't be a @classmethod because it has to work with subclass properties
     @staticmethod
     def init(c, **kwargs):
+        super().init(c, **kwargs)
         c.comp_len = len(c.prefix) + c.salt_length + len(c.suffix)
 
 
@@ -122,6 +155,14 @@ class SaltedAlgorithm(Algorithm):
         """Takes the prefix-plus-salt from the argument."""
         c.check_salt(s)
 
+        if c.supports_long_salt:
+            logging.debug("Extracting salt: len(s)=%d, c.comp_len=%d, c.salt_length=%d",
+                           len(s), c.comp_len, c.salt_length)
+            # Ensure it isn't a short salt indicated by presence of delimiter sooner
+            if len(s) > c.comp_len and s[c.comp_len-1] != c.suffix:
+                # long salt in hash
+                return s[:c.comp_len+c.salt_length]
+
         return s[:c.comp_len]
 
 
@@ -146,8 +187,8 @@ class SaltedAlgorithm(Algorithm):
 
         # Check that the hash starts with the salt; otherwise, crypt(3) might
         # not understand the algorithm implied by the salt format
-        if return_value[:self.comp_len] != self.salt:
-            raise errors.BadAlgException(mode + " hashing does not appear to be supported on this platform")
+        if self.extract_salt(return_value) != self.salt:
+            raise errors.BadAlgException(self.name + " hashing does not appear to be supported on this platform")
 
         return return_value
 
@@ -185,6 +226,21 @@ class BinarySaltedAlgorithm(SaltedAlgorithm):
 
         # return everything after the digest part of the decoded bits
         return bits[c.digest_length:]
+
+
+    def hash(self, plaintext):
+        """Returns an encoded hash
+
+        [Override]"""
+
+        return_value = crypt.crypt(plaintext, self.salt)
+
+        # Check that the hash starts with the salt; otherwise, crypt(3) might
+        # not understand the algorithm implied by the salt format
+        if return_value[:self.comp_len] != self.salt:
+            raise errors.BadAlgException(self.name + " hashing does not appear to be supported on this platform")
+
+        return return_value
 
 
 class PLSaltedAlgorithm(SaltedAlgorithm):
