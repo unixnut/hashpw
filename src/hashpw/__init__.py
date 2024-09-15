@@ -13,6 +13,7 @@ from .algs.ApacheMD5 import ApacheMD5
 from .algs.ApacheSHA1 import ApacheSHA1
 from .algs.BasicMD5 import BasicMD5
 from .algs.Blowfish import Blowfish
+from .algs.BCrypt import BCrypt, BCryptVariant
 from .algs.Crypt import Crypt
 from .algs.ExtDes import ExtDes
 from .algs.MD5 import MD5
@@ -28,7 +29,7 @@ from .algs.SSHA import SSHA
 
 # *** DEFINITIONS ***
 # Algorithms with longer prefixes need to appear earlier in this list
-algorithms = (PBKDF2, MD5, ApacheMD5, ApacheSHA1, Blowfish, SHA256, SHA512, MySqlSHA1, Phpass, PhpBB3, SSHA, BasicMD5, ExtDes, Crypt, OldPassword)
+algorithms = (PBKDF2, MD5, ApacheMD5, ApacheSHA1, BCrypt, BCryptVariant, Blowfish, SHA256, SHA512, MySqlSHA1, Phpass, PhpBB3, SSHA, BasicMD5, ExtDes, Crypt, OldPassword)
 
 
 # *** FUNCTIONS ***

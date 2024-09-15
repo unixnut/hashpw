@@ -81,6 +81,7 @@ class AlgorithmUnsaltedMixin(AlgorithmGenericTests):
 class AlgorithmSaltedMixin(AlgorithmGenericTests):
     def setUp(self):
         self.alg_class.init(self.alg_class)
+        # Specifying and invalid salt causes one to be generated
         self.test_obj = self.alg_class(None)
 
     def get_match_obj(self) -> Type:
@@ -143,6 +144,17 @@ class TestApacheSHA1(AlgorithmUnsaltedMixin, unittest.TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.alg_class = hashpw.ApacheSHA1
+
+
+class TestBCrypt(AlgorithmSaltedMixin, unittest.TestCase):
+    """Tests for BCrypt algorithm."""
+
+    foobie_bletch_hash = "$2b$13$LTBh67RRAABQEnmUJAIAAOWljYkQTzQYwT3EHiqU38GHtupHJj/F2"
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.alg_class = hashpw.BCrypt
 
 
 class TestBlowfish(AlgorithmSaltedMixin, unittest.TestCase):

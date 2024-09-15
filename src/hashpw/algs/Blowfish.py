@@ -5,13 +5,13 @@ from ..structure import SaltedAlgorithm
 
 class Blowfish(SaltedAlgorithm):
     """See https://pypi.org/project/py-bcrypt/"""
-    name = "blowfish"
-    option = "b"
+    name = "blowfish-old"
+    option = "O"
     prefix = "$2a$"
-    extra_prefix = "{BLF-CRYPT}"
     suffix = ""
     min_length = 60
     salt_length = 29
+    digest_length = 31
     rounds_strategy = 'logarithmic'
 
 
@@ -36,10 +36,16 @@ class Blowfish(SaltedAlgorithm):
 
 
     def hash(self, plaintext):
-        return bcrypt.hashpw(plaintext, self.salt)
+        hash_bytes = bcrypt.hashpw(plaintext.encode('ascii'),
+                                   self.salt.encode('ascii'))
+        return hash_bytes.decode('ascii')
 
 
     @classmethod
     def generate_salt(c):
         """Calculates an encoded salt string, including prefix, for this algorithm."""
-        return bcrypt.gensalt(log_rounds=c.rounds)
+        
+        # py-bcrypt used to use log_rounds parameter
+        salt = bcrypt.gensalt(rounds=c.rounds).decode('ascii')
+        tweaked_salt = salt[0:2] + 'a' + salt[3:]
+        return tweaked_salt

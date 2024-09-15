@@ -124,27 +124,24 @@ class SaltedAlgorithm(Algorithm):
 
 
     @classmethod
-    def generate_salt(c):
-        """Calculate an encoded salt string, including prefix, for algorithm @p c .
-        Note that blowfish supports up to a 22-character salt, but only 16 is provided
-        by this method."""
+    def generate_salt(c, raw_byte_count=12, *, padding_byte=None):
+        """Calculate an encoded salt string, including prefix, for algorithm @p c ."""
 
-        # make a salt consisting of 96 bits of random data, packed into a
-        # string, encoded using a variant of base-64 encoding and surrounded
-        # by the correct markers
-        rand_bits = struct.pack('<QQ', c.r.getrandbits(48), c.r.getrandbits(48))[:12]
-        salt = c.prefix + utils.base64encode(rand_bits)[:c.salt_length] + c.suffix
+        salt = c.prefix + c.generate_raw_salt(raw_byte_count, padding_byte=padding_byte)[:c.salt_length] + c.suffix
 
         return salt
 
 
     @classmethod
-    def generate_raw_salt(c):
-        """Calculate a base64-encoded salt string."""
+    def generate_raw_salt(c, raw_byte_count=12, *, padding_byte=None):
+        """Calculate a base64-encoded salt string.  @p raw_byte_count can be up to 16."""
 
         # make a salt consisting of 96 bits of random data, packed into a
         # string, encoded using a variant of base-64 encoding
-        rand_bits = struct.pack('<QQ', c.r.getrandbits(48), c.r.getrandbits(48))[:12]
+        if padding_byte is not None:
+            rand_bits = struct.pack('<QQ', c.r.getrandbits(48), c.r.getrandbits(48))[:raw_byte_count] + padding_byte
+        else:
+            rand_bits = struct.pack('<QQ', c.r.getrandbits(48), c.r.getrandbits(48))[:raw_byte_count]
         salt = utils.base64encode(rand_bits)
 
         return salt
@@ -153,6 +150,7 @@ class SaltedAlgorithm(Algorithm):
     @classmethod
     def extract_salt(c, s):
         """Takes the prefix-plus-salt from the argument."""
+        logging.debug("string = %s", s)
         c.check_salt(s)
 
         if c.supports_long_salt:

@@ -6,19 +6,23 @@
 # Licence: This file is released under the GNU General Public License
 #
 usage = """Usage: hashpw [ -e ] [ -c | -C | -m | -a | -A | -b | -2 [ -l ] | -5 [ -l ] | -S | -p | -d [ -l ] | -M ] [ <salt> | -v [ -q ] <hash> ]
-  -l  Force a salt of length 16 to be used with SHA-256 or SHA-512
+  -l  Force a salt of length 16 to be used with PBKDF2, SHA-256 or SHA-512
   -e  Also prefix the hash with the scheme prefix used by "doveadm pw"
   -v  Verify instead of printing a hash
   -V  Show program version information
+  -I  Show information about the selected algorithm instead of printing a hash
   -q  Don't print verification result (exit codes only; 0 = suceeded, 2 = failed)
   -r <rounds>  Set round count
   -R <rounds>  Set logarithmic round count
+  -u <username>
 
 Algorithm options:
   -m  MD5 (default)
   -c  crypt (DES), with a two character salt
   -x  Extended DES, with a nine character salt (FreeBSD 4.x and NetBSD only)
-  -b  blowfish
+  -O  blowfish A.K.A. BCrypt (older "$2a$" prefix)
+  -b  blowfish A.K.A. BCrypt (standard "$2b$" prefix)
+  -y  blowfish A.K.A. BCrypt (variant "$2y$" prefix used by BSD)
   -a  Apache MD5
   -A  Apache SHA-1 (RFC 2307; can be used by OpenLDAP) (does not use a salt; INSECURE!!)
   -2  SHA-256
@@ -30,6 +34,9 @@ Algorithm options:
   -d  PBKDF2 with Django prefix
   -P  Portable PHP password hashing framework, as used by WordPress
   -B  phpBB3: Same as -P except the hash starts with "$H$" instead of "$P$"
+  -C  CRAM-MD5 (does not use a salt; INSECURE!!)
+  -D  DIGEST-MD5 (requires username)
+  -s  SCRAM-SHA-1 (RFC 5802; see https://en.wikipedia.org/wiki/Salted_Challenge_Response_Authentication_Mechanism)
 """
 #
 # See http://forum.insidepro.com/viewtopic.php?t=8225 for more algorithms
