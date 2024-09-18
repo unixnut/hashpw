@@ -1,5 +1,7 @@
 from typing import Set, Dict, Sequence, Tuple, List, Union, AnyStr, Iterable, Callable, Generator, Type, Optional, TextIO, IO
 
+import logging
+
 import passlib.hash
 import passlib.utils.binary
 
@@ -18,6 +20,7 @@ class Phpass(PLSaltedAlgorithm):
     suffix = ""
     min_length = 34
     salt_length = 9  # includes the round count
+    digest_length = 22
     rounds_strategy = 'logarithmic'
 
 
@@ -42,8 +45,20 @@ class Phpass(PLSaltedAlgorithm):
     def __init__(self, salt):
         super().__init__(salt)
 
+        # These include the rounds char
+        startidx = len(self.prefix) + 1
+        endidx   = len(self.prefix) + self.salt_length
+        if salt:
+            # This salt might not match the values set by init()
+            rounds = passlib.utils.binary.h64.decode_int6(salt[3].encode('ascii'))
+            logging.debug("Parsing salt: len(s)=%d, startidx=%d, endidx=%d, rounds=%d",
+                          len(salt), startidx, endidx, rounds)
+        else:
+            rounds = self.rounds
+            salt   = self.salt
+
         try:
-            self.hasher = passlib.hash.phpass.using(salt=self.salt[4:], rounds=self.rounds)
+            self.hasher = passlib.hash.phpass.using(salt=salt[startidx:endidx], rounds=rounds)
         except ValueError as e:
             raise errors.RoundException("Rounds cannot be more than 30") from e
 

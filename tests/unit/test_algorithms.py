@@ -81,12 +81,13 @@ class AlgorithmUnsaltedMixin(AlgorithmGenericTests):
 class AlgorithmSaltedMixin(AlgorithmGenericTests):
     def setUp(self):
         self.alg_class.init(self.alg_class)
-        # Specifying and invalid salt causes one to be generated
+        # Specifying an invalid salt causes one to be generated
         self.test_obj = self.alg_class(None)
 
     def get_match_obj(self) -> Type:
         """Override the default object (which has a computed salt)."""
 
+        # Use a specific salt
         return self.alg_class(self.foobie_bletch_hash)
 
 
@@ -229,11 +230,11 @@ class TestPhpass(AlgorithmSaltedMixin, unittest.TestCase):
         cls.alg_class = hashpw.Phpass
 
 
-@unittest.skip("Algorithm unimplemented")
+## @unittest.skip("Algorithm unimplemented")
 class TestPhpBB3(AlgorithmSaltedMixin, unittest.TestCase):
     """Tests for PhpBB3 algorithm."""
 
-    foobie_bletch_hash = ""
+    foobie_bletch_hash = "$H$F61F3imUBtMs4RjQsiTuW/TGJ8U4ve/"
 
     @classmethod
     def setUpClass(cls):

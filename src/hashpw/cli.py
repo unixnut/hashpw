@@ -253,6 +253,8 @@ def main():
     except errors.InvalidArgException as e:
         barf(e, EXIT_BAD_OPTION)
     except errors.RoundException as e:
+        if debug:
+            logging.exception(e)
         barf(e, EXIT_ROUNDS)
     except ImportError as e:
         barf("Cannot find required algorithm handler: %s" % (e,), EXIT_MISSING_HANDLER)

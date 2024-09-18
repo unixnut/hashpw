@@ -10,4 +10,7 @@ class PhpBB3(Phpass):
 
 
     def hash(self, plaintext):
-        raise errors.BadAlgException(self.name + " not implemented")
+        ## raise errors.BadAlgException(self.name + " not implemented")
+
+        phpass_hash = self.hasher.hash(plaintext)
+        return self.prefix + phpass_hash[3:]
