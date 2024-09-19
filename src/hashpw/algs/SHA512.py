@@ -10,6 +10,7 @@ class SHA512(SaltedAlgorithm):
     extra_prefix = "{SHA512-CRYPT}"
     suffix = "$"
     min_length = 98
+    encoded_digest_length = 86
     supports_long_salt = True
 
 

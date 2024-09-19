@@ -11,7 +11,7 @@ class Blowfish(SaltedAlgorithm):
     suffix = ""
     min_length = 60
     salt_length = 29
-    digest_length = 31
+    encoded_digest_length = 31
     rounds_strategy = 'logarithmic'
 
 

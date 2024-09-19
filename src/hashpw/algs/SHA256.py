@@ -10,6 +10,7 @@ class SHA256(SaltedAlgorithm):
     extra_prefix = "{SHA256-CRYPT}"
     suffix = "$"
     min_length = 55
+    encoded_digest_length = 43
     supports_long_salt = True
 
 

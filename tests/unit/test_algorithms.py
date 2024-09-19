@@ -297,5 +297,16 @@ class TestOldPassword(AlgorithmUnsaltedMixin, unittest.TestCase):
         cls.alg_class = hashpw.OldPassword
 
 
+class TestLDAPv2SMD5(AlgorithmSaltedMixin, unittest.TestCase):
+    """Tests for Crypt algorithm."""
+
+    foobie_bletch_hash = "{SMD5}US3vYMX6Ib9q5qklKXVBStHHyC0="
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.alg_class = hashpw.LDAPv2SMD5
+
+
 if __name__ == '__main__':
     unittest.main()

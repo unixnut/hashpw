@@ -193,7 +193,11 @@ class SaltedAlgorithm(Algorithm):
 
 
 class BinarySaltedAlgorithm(SaltedAlgorithm):
-    """For algorithms that use binary salts."""
+    """
+    For algorithms that use binary salts.
+
+    These all use hash = prefix + base64encode(alg(digest + salt))
+    """
 
     # This can't be a @classmethod because it has to work with subclass properties
     @staticmethod
@@ -226,19 +230,15 @@ class BinarySaltedAlgorithm(SaltedAlgorithm):
         return bits[c.digest_length:]
 
 
-    def hash(self, plaintext):
-        """Returns an encoded hash
+    def generic_hash(self, alg_fn: Type, plaintext: str):
+        """Returns an encoded hash using a given basic hashing algorithm"""
 
-        [Override]"""
+        input_byte_str = plaintext.encode("UTF-8")
+        context = alg_fn(input_byte_str)
+        context.update(self.salt)
+        output_byte_str = context.digest()
+        return self.prefix + utils.base64encode(output_byte_str + self.salt)
 
-        return_value = crypt.crypt(plaintext, self.salt)
-
-        # Check that the hash starts with the salt; otherwise, crypt(3) might
-        # not understand the algorithm implied by the salt format
-        if return_value[:self.comp_len] != self.salt:
-            raise errors.BadAlgException(self.name + " hashing does not appear to be supported on this platform")
-
-        return return_value
 
 
 class PLSaltedAlgorithm(SaltedAlgorithm):

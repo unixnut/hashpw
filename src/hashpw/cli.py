@@ -25,9 +25,16 @@ Algorithm options:
   -y  blowfish A.K.A. BCrypt (variant "$2y$" prefix used by BSD)
   -a  Apache MD5
   -A  Apache SHA-1 (RFC 2307; can be used by OpenLDAP) (does not use a salt; INSECURE!!)
+  -z  Argon2
+  -s  BCrypt+SHA256
+  -f  Fairly Secure Hashed Password
+  -g  Grub’s PBKDF2 Hash
   -2  SHA-256
   -5  SHA-512 (Linux standard password hashing method)
-  -S  SSHA (used by OpenLDAP)
+  -L  LDAPv2 salted MD5 digest
+  -S  LDAPv2 salted SHA1 digest a.k.a. SSHA (used by OpenLDAP)
+  --ssha256 LDAPv2 salted SHA256 digest
+  --ssha512 LDAPv2 salted SHA512 digest
   -o  MySQL OLD_PASSWORD() (does not use a salt; INSECURE!!)
   -p  MySQL v4.1+ PASSWORD() double SHA-1 (does not use a salt; INSECURE!!)
   -M  MySQL MD5() -- just hex encoding (does not use a salt; INSECURE!!)
@@ -36,7 +43,10 @@ Algorithm options:
   -B  phpBB3: Same as -P except the hash starts with "$H$" instead of "$P$"
   -C  CRAM-MD5 (does not use a salt; INSECURE!!)
   -D  DIGEST-MD5 (requires username)
-  -s  SCRAM-SHA-1 (RFC 5802; see https://en.wikipedia.org/wiki/Salted_Challenge_Response_Authentication_Mechanism)
+  -1  SCRAM-SHA-1 (RFC 5802; see https://en.wikipedia.org/wiki/Salted_Challenge_Response_Authentication_Mechanism)
+  --pbkdf2-sha1
+  --pbkdf2-sha256
+  --pbkdf2-sha512
 """
 #
 # See http://forum.insidepro.com/viewtopic.php?t=8225 for more algorithms

@@ -20,7 +20,7 @@ class Phpass(PLSaltedAlgorithm):
     suffix = ""
     min_length = 34
     salt_length = 9  # includes the round count
-    digest_length = 22
+    encoded_digest_length = 22
     rounds_strategy = 'logarithmic'
 
 
