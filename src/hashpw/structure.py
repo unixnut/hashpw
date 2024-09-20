@@ -139,9 +139,9 @@ class SaltedAlgorithm(Algorithm):
         # make a salt consisting of 96 bits of random data, packed into a
         # string, encoded using a variant of base-64 encoding
         if padding_byte is not None:
-            rand_bits = struct.pack('<QQ', c.r.getrandbits(48), c.r.getrandbits(48))[:raw_byte_count] + padding_byte
+            rand_bits = struct.pack('<QQ', c.r.getrandbits(64), c.r.getrandbits(64))[:raw_byte_count] + padding_byte
         else:
-            rand_bits = struct.pack('<QQ', c.r.getrandbits(48), c.r.getrandbits(48))[:raw_byte_count]
+            rand_bits = struct.pack('<QQ', c.r.getrandbits(64), c.r.getrandbits(64))[:raw_byte_count]
         salt = utils.base64encode(rand_bits)
 
         return salt
@@ -210,9 +210,10 @@ class BinarySaltedAlgorithm(SaltedAlgorithm):
     def generate_salt(c):
         """Calculates a binary salt string for algorithm @p c ."""
 
-        # make a salt consisting of 96 bits of random data and save the
-        # required number of bytes worth
-        rand_bits = struct.pack('<QQ', c.r.getrandbits(48), c.r.getrandbits(48))[:12]
+        if c.salt_length > 8:
+            rand_bits = struct.pack('<QQ', c.r.getrandbits(64), c.r.getrandbits(64))
+        else:
+            rand_bits = struct.pack('<Q', c.r.getrandbits(64))
         salt = rand_bits[:c.salt_length]
 
         return salt

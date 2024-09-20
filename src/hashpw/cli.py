@@ -140,12 +140,15 @@ short_to_long = {}
 opt_string = ""
 alg_names = []
 for a in hashpw.algorithms:
-    if a.option in short_to_long:
-        raise errors.LogicException("Short option letter '%s' for %s already used by %s" % (a.option, a.name, short_to_long[a.option]))
-    short_to_long[a.option] = a.name
-    # build the option sequences
-    opt_string += a.option
+    if getattr(a, 'option', None):
+        if a.option in short_to_long:
+            raise errors.LogicException("Short option letter '%s' for %s already used by %s" % (a.option, a.name, short_to_long[a.option]))
+        short_to_long[a.option] = a.name
+        # build the option sequences
+        opt_string += a.option
     alg_names.append(a.name)
+long_mode_map = { a: a for a in alg_names }
+## long_mode_map['alias'] = 'alg'
 
 
 def main():
@@ -161,9 +164,15 @@ def main():
     # -- option handling --
     try:
         (opts, args) = getopt.getopt(sys.argv[1:], opt_string + "lvqhr:R:Ieu:V",
-                                     ['help', 'rounds:', 'rounds-log:', 'username:', 'debug', 'version'] + alg_names)
+                                     ['help', 'rounds:', 'rounds-log:', 'username:', 'debug', 'version', 'info'] + list(long_mode_map.keys()))
     except getopt.GetoptError as e:
         barf(e, EXIT_CMDLINE_BAD)
+
+    # Handle this here to allow for logging during option handling
+    if ("--debug",'') in opts:
+        ## print('debug mode ON')
+        debug = True
+        logging.basicConfig(level=logging.DEBUG)
 
     if ("--help",'') in opts or ("-h",'') in opts:
         help()
@@ -173,6 +182,8 @@ def main():
         if len(optpair[0]) == 2 and optpair[0][0] == "-":
             # short option
             if optpair[0][1] in short_to_long:
+                if mode:
+                    barf("Multiple mode options are not allowed", EXIT_MULTIPLE_MODES)
                 mode = short_to_long[optpair[0][1]]
             elif optpair[0] == "-l":
                 settings['long_salt'] = True
@@ -190,25 +201,21 @@ def main():
                 special = 'info'
         else:
             # long option
-            if optpair[0][2:] in list(short_to_long.values()):
+            if optpair[0][2:] in long_mode_map:
                 if mode:
                     barf("Multiple mode options are not allowed", EXIT_MULTIPLE_MODES)
-                mode = optpair[0][2:]
+                mode = long_mode_map[optpair[0][2:]]
+                logging.debug("mode (long arg) = %s", mode)
             elif optpair[0][2:] == 'rounds':
                 settings['rounds'] = int(optpair[1])
             elif optpair[0][2:] == 'rounds-log':
                 settings['rounds'] = int(math.pow(2, int(optpair[1])))
-            elif optpair[0][2:] == 'debug':
-                debug = True
             elif optpair[0][2:] == 'version':
                 special = 'version'
             elif optpair[0][2:] == 'info':
                 special = 'info'
 
     # -- pre-preparation --
-    if debug:
-        ## print('debug mode ON')
-        logging.basicConfig(level=logging.DEBUG)
     try:
         hashpw.init(settings)
     except errors.InvalidArgException as e:

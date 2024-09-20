@@ -308,5 +308,27 @@ class TestLDAPv2SMD5(AlgorithmSaltedMixin, unittest.TestCase):
         cls.alg_class = hashpw.LDAPv2SMD5
 
 
+class TestLDAPv2SSHA256(AlgorithmSaltedMixin, unittest.TestCase):
+    """Tests for  algorithm."""
+
+    foobie_bletch_hash = "{SSHA256}1P2yehlGdiSHGedo4TmrtXVYfOadmJ4b8hoX7ukctM/dF0f6l5JxKw=="
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.alg_class = hashpw.LDAPv2SSHA256
+
+
+class TestLDAPv2SSHA512(AlgorithmSaltedMixin, unittest.TestCase):
+    """Tests for LDAPv2 SSHA512 algorithm."""
+
+    foobie_bletch_hash = "{SSHA512}UzVf1pkQNeYMpj5SbmjSsGdDOActKhUYJWWIVjy5dR7gm7epCUsJSrC6cwsdM4C3W5cxgXZ7mDWmnykvRxVrmLn/lS10y5MH"
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.alg_class = hashpw.LDAPv2SSHA512
+
+
 if __name__ == '__main__':
     unittest.main()
