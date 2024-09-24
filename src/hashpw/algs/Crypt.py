@@ -2,6 +2,8 @@ from ..structure import SaltedAlgorithm
 
 
 class Crypt(SaltedAlgorithm):
+    """crypt (DES), with a two character salt"""
+
     name = "crypt"
     option = "c"
     prefix = ""

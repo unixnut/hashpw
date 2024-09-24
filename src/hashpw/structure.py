@@ -27,6 +27,7 @@ class Algorithm(object):
             c.rounds = -1
 
 
+    # DEPRECATED
     @classmethod
     def final_prep(c):
         """Called by the constructor, i.e. only if the algorithm class is
@@ -41,12 +42,25 @@ class Algorithm(object):
 
 
     @classmethod
-    def set_rounds(c, default_rounds: int, extra_args: Dict):
+    def set_rounds(c, default_rounds: int = None, *, extra_args: Dict):
+        """
+        Figure out how many hash algorithm rounds to use based on command-line
+        option (if any) or the class's default.
+
+        If present, the 'rounds' element in @p extra_args is removed after
+        processing.  Therefore this method must be called *before* the
+        calling method's class's parent class's init() method.
+        """
+
         try:
             rounds = extra_args.pop('rounds')
         except KeyError:
             rounds = False
 
+        # rounds can have one of three kinds of value:
+        #   integer > 0 passed on command-line
+        #   integer == 0 passed on command-line
+        #   False default from settings, which is a defaultdict(bool); CAREFUL: will compare equal with 0
         if rounds:
             if c.rounds_strategy == 'logarithmic':
                 c.rounds = math.ceil(math.log2(rounds))
@@ -55,14 +69,22 @@ class Algorithm(object):
             else:
                 # Invalid value that will trip the constructor check
                 c.rounds = -1
+        elif rounds is not False and rounds == 0:
+            # Special case that uses the passlib default
+            c.rounds = c.vanilla_default_rounds
+            logging.debug("Using passlib rounds=%d", c.vanilla_default_rounds)
         else:
-            # This will match the rounds_strategy so doesn't need to be converted
-            c.rounds = default_rounds
+            if default_rounds is not None:
+                c.rounds = default_rounds
+            else:
+                # This will match the rounds_strategy so doesn't need to be converted
+                c.rounds = c.default_rounds
 
 
     def __init__(self):
         if not self.rounds_strategy and hasattr(self, 'rounds'):
             raise errors.InvalidArgException("Algorithm %s doesn't support changing the round count" % self.name)
+        # DEPRECATED
         self.final_prep()
 
 
@@ -74,6 +96,11 @@ class Algorithm(object):
 
     def hash(self, plaintext):
         """Returns an encoded hash"""
+
+
+
+# TODO: RoundsMixin with init() that calls c.set_rounds()
+# (this will implicitly use __mro__ to call multiple parent init())
 
 
 
@@ -246,7 +273,7 @@ class PLSaltedAlgorithm(SaltedAlgorithm):
     """
     Specific class for algorithms that use passlib.
 
-    Class is required to set `self.hasher` in `__init__()`. 
+    Class is required to set `self.hasher` in `__init__()`.
     """
 
     def hash(self, plaintext):

@@ -10,6 +10,8 @@ from ..structure import PLSaltedAlgorithm
 
 
 class PBKDF2(PLSaltedAlgorithm):
+    """PBKDF2 with Django prefix"""
+
     name = "django-pbkdf2"
     option = "d"
     prefix = "pbkdf2_sha256"
@@ -17,6 +19,8 @@ class PBKDF2(PLSaltedAlgorithm):
     min_length = 70     # prefix + '$' + rounds(at least 2 chars) + '$' + salt + '$' + 44 chars
     supports_long_salt = True
     rounds_strategy = 'numeric'
+    default_rounds = 500000
+    vanilla_default_rounds = 29000
 
 
     # This can't be a @classmethod because parent classes have to work with its properties
@@ -27,9 +31,9 @@ class PBKDF2(PLSaltedAlgorithm):
         if long_salt:
             c.salt_length = 16
         else:
-            c.salt_length = 8
+            c.salt_length = 12
 
-        c.set_rounds(300000, kwargs)
+        c.set_rounds(extra_args=kwargs)
         PLSaltedAlgorithm.init(c, **kwargs)
 
         # Count the fixed chars plus the number of digits

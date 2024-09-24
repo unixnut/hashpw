@@ -2,6 +2,8 @@ from ..structure import SaltedAlgorithm
 
 
 class ExtDes(SaltedAlgorithm):
+    """Extended DES, with a nine character salt (FreeBSD 4.x and NetBSD only)"""
+
     name = "ext-des"
     option = "x"
     prefix = "_"

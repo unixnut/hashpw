@@ -5,6 +5,8 @@ from ..structure import Algorithm
 
 
 class BasicMD5(Algorithm):
+    """MySQL MD5()"""
+
     name = "basic-md5"
     option = "M"
     prefix = ""

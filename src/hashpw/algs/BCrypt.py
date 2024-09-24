@@ -8,6 +8,8 @@ from ..structure import PLSaltedAlgorithm
 
 
 class BCrypt(PLSaltedAlgorithm):
+    """blowfish A.K.A. BCrypt (standard prefix)"""
+
     name = "bcrypt"
     option = "b"
     prefix = "$2b$"
@@ -16,12 +18,14 @@ class BCrypt(PLSaltedAlgorithm):
     salt_length = 29
     encoded_digest_length = 31
     rounds_strategy = 'logarithmic'
+    default_rounds = 12   # 13 was too high (nearly a second on a Intel Core i5-4300U CPU @ 1.90GHz)
+    vanilla_default_rounds = 12
 
 
     # This can't be a @classmethod because parent classes have to work with its properties
     @staticmethod
     def init(c, **kwargs: Dict):
-        c.set_rounds(13, kwargs)
+        c.set_rounds(extra_args=kwargs)
         super().init(c, **kwargs)
 
 
@@ -72,6 +76,8 @@ class BCrypt(PLSaltedAlgorithm):
 
 
 class BCryptVariant(BCrypt):
+    """blowfish A.K.A. BCrypt (variant "$2y$" prefix used by BSD)"""
+
     name = "bcrypt-variant"
     option = "y"
     prefix = "$2y$"

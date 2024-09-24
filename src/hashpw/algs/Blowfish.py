@@ -4,7 +4,8 @@ from ..structure import SaltedAlgorithm
 
 
 class Blowfish(SaltedAlgorithm):
-    """See https://pypi.org/project/py-bcrypt/"""
+    """blowfish A.K.A. BCrypt (older "$2a$" prefix)"""
+
     name = "blowfish-old"
     option = "O"
     prefix = "$2a$"
@@ -13,12 +14,14 @@ class Blowfish(SaltedAlgorithm):
     salt_length = 29
     encoded_digest_length = 31
     rounds_strategy = 'logarithmic'
+    default_rounds = 12   # 13 was too high (nearly a second on a Intel Core i5-4300U CPU @ 1.90GHz)
+    vanilla_default_rounds = 12
 
 
     # This can't be a @classmethod because parent classes have to work with its properties
     @staticmethod
     def init(c, **kwargs: Dict):
-        c.set_rounds(13, kwargs)
+        c.set_rounds(extra_args=kwargs)
         super().init(c, **kwargs)
 
 
@@ -44,7 +47,7 @@ class Blowfish(SaltedAlgorithm):
     @classmethod
     def generate_salt(c):
         """Calculates an encoded salt string, including prefix, for this algorithm."""
-        
+
         # py-bcrypt used to use log_rounds parameter
         salt = bcrypt.gensalt(rounds=c.rounds).decode('ascii')
         tweaked_salt = salt[0:2] + 'a' + salt[3:]

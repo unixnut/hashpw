@@ -9,6 +9,7 @@ from .. import errors
 
 class LDAPv2SMD5(BinarySaltedAlgorithm):
     """
+    LDAPv2 salted MD5 digest
     See https://passlib.readthedocs.io/en/stable/lib/passlib.apps.html#passlib.apps.ldap_context
     """
 

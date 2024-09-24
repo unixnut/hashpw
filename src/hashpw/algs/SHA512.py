@@ -4,6 +4,11 @@ from ..structure import SaltedAlgorithm
 
 
 class SHA512(SaltedAlgorithm):
+    """
+    Unix SHA512 crypt
+    Linux standard password hashing method
+    """
+
     name = "sha-512"
     option = "5"
     prefix = "$6$"

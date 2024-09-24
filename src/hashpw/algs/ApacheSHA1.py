@@ -5,6 +5,8 @@ from ..structure import Algorithm
 
 
 class ApacheSHA1(Algorithm):
+    """Apache SHA-1 (RFC 2307; can be used by OpenLDAP)"""
+
     name = "apache-sha-1"
     option = "A"
     prefix = "{SHA}"

@@ -5,6 +5,8 @@ from ..structure import BinarySaltedAlgorithm
 
 
 class SSHA(BinarySaltedAlgorithm):
+    """LDAPv2 salted SHA1 digest"""
+
     name = "ssha"
     option = "S"
     prefix = "{SSHA}"

@@ -10,14 +10,13 @@ usage = """Usage: hashpw [ -e ] [ -c | -C | -m | -a | -A | -b | -2 [ -l ] | -5 [
   -e  Also prefix the hash with the scheme prefix used by "doveadm pw"
   -v  Verify instead of printing a hash
   -V  Show program version information
-  -I  Show information about the selected algorithm instead of printing a hash
+  -I  Show information about the selected/discovered algorithm instead of printing a hash
   -q  Don't print verification result (exit codes only; 0 = suceeded, 2 = failed)
   -r <rounds>  Set round count
   -R <rounds>  Set logarithmic round count
-  -u <username>
 
 Algorithm options:
-  -m  MD5 (default)
+  -m  Unix MD5 crypt (default)
   -c  crypt (DES), with a two character salt
   -x  Extended DES, with a nine character salt (FreeBSD 4.x and NetBSD only)
   -O  blowfish A.K.A. BCrypt (older "$2a$" prefix)
@@ -25,10 +24,6 @@ Algorithm options:
   -y  blowfish A.K.A. BCrypt (variant "$2y$" prefix used by BSD)
   -a  Apache MD5
   -A  Apache SHA-1 (RFC 2307; can be used by OpenLDAP) (does not use a salt; INSECURE!!)
-  -z  Argon2
-  -s  BCrypt+SHA256
-  -f  Fairly Secure Hashed Password
-  -g  Grub’s PBKDF2 Hash
   -2  SHA-256
   -5  SHA-512 (Linux standard password hashing method)
   -L  LDAPv2 salted MD5 digest
@@ -41,12 +36,6 @@ Algorithm options:
   -d  PBKDF2 with Django prefix
   -P  Portable PHP password hashing framework, as used by WordPress
   -B  phpBB3: Same as -P except the hash starts with "$H$" instead of "$P$"
-  -C  CRAM-MD5 (does not use a salt; INSECURE!!)
-  -D  DIGEST-MD5 (requires username)
-  -1  SCRAM-SHA-1 (RFC 5802; see https://en.wikipedia.org/wiki/Salted_Challenge_Response_Authentication_Mechanism)
-  --pbkdf2-sha1
-  --pbkdf2-sha256
-  --pbkdf2-sha512
 """
 #
 # See http://forum.insidepro.com/viewtopic.php?t=8225 for more algorithms
@@ -64,6 +53,8 @@ Algorithm options:
 #     /usr/share/common-licenses/GPL-3 on Debian systems.
 #     Or see the file LICENSE in the same directory as this program.
 
+from typing import Set, Dict, Sequence, Tuple, List, Union, AnyStr, Iterable, Callable, Generator, Type, Optional, TextIO, IO
+
 import sys
 import collections
 import getopt
@@ -73,25 +64,27 @@ import math
 
 import hashpw       # Top-level module
 from . import errors
+from .structure import Algorithm
 
 
 # *** DEFINITIONS ***
 program_name = "hashpw"
 
-EXIT_OK = 0
-EXIT_CMDLINE_BAD = 1
-EXIT_VERIFY_FAILED = 2
-EXIT_VERIFY_PARTIAL_HASH = 3
-EXIT_VERIFY_NO_SALT = 4
-EXIT_PASSWORD_MISMATCH = 5
-EXIT_SHORT_SALT = 7
-EXIT_SALT_PREFIX = 8
-EXIT_BAD_ALG = 10
-EXIT_MISSING_HANDLER = 11
-EXIT_MULTIPLE_MODES = 13
-EXIT_MISSING_MODE = 14
-EXIT_ROUNDS = 15
-EXIT_BAD_OPTION = 16
+EXIT_OK                     = 0
+EXIT_CMDLINE_BAD            = 1
+EXIT_VERIFY_FAILED          = 2
+EXIT_VERIFY_PARTIAL_HASH    = 3
+EXIT_VERIFY_NO_SALT         = 4
+EXIT_PASSWORD_MISMATCH      = 5
+EXIT_SHORT_SALT             = 7
+EXIT_SALT_PREFIX            = 8
+EXIT_BAD_ALG                = 10
+EXIT_MISSING_HANDLER        = 11
+EXIT_MULTIPLE_MODES         = 13
+EXIT_MISSING_MODE           = 14
+EXIT_ROUNDS                 = 15
+EXIT_BAD_OPTION             = 16
+EXIT_UNSUPPORTED            = 17
 
 DEFAULT_MODE = "md5"
 
@@ -114,7 +107,7 @@ def help():
     print(usage)
 
 
-def create_hasher(alg_class, salt, settings):
+def create_hasher(alg_class: Type, salt: str, settings: Dict) -> Algorithm:
     """
     Create an object of the algorithm's class, warning if a salt was
     supplied but the algorithm doesn't support it.
@@ -128,10 +121,110 @@ def create_hasher(alg_class, salt, settings):
         return alg_class()
 
 
-def make_hash(hasher, s: str):
+def rounds_log_convert(n: str) -> int:
+    if int(n) == 0:
+        # Special case that uses the passlib default
+        return 0
+    else:
+        return int(math.pow(2, int(n)))
+
+
+def make_hash(hasher: Algorithm, s: str) -> str:
     ## plaintext = s.encode("UTF-8")
 
     return hasher.hash(s)
+
+
+def read_password() -> str:
+    # TODO: Check for stdin not a tty and read that instead
+    try:
+        # get two password(s)
+        pw1 = getpass.getpass()
+        if not settings['verify']:
+            pw2 = getpass.getpass("Re-enter password: ")
+            # compare them and if they don't match, report an error
+            if pw1 != pw2:
+                barf("Passwords do not match", EXIT_PASSWORD_MISMATCH)
+            else:
+                if pw1 == "":
+                    print(program_name + ":", "warning: password is blank!!", file=sys.stderr)
+    except KeyboardInterrupt:
+        print("^C", file=sys.stderr)
+        sys.exit(EXIT_OK)
+
+    return pw1
+
+
+def get_class_info(alg_class: Type) -> str:
+    ## if alg_class.aliases ...
+    if alg_class.option:
+        s = "%s (%s, %s)" % (alg_class.__name__, "--" + alg_class.name, "-" + alg_class.option)
+    else:
+        s = "%s (%s)" % (alg_class.__name__, "--" + alg_class.name)
+    if hasattr(alg_class, 'description'):
+        s += "\n" + alg_class.description
+    elif alg_class.__doc__:
+        s += "\n" + alg_class.__doc__
+
+    if alg_class.prefix:
+        s += "\nHash prefix: " + alg_class.prefix
+    else:
+        s += "\nHash has no prefix"
+
+    rounds_strategy = getattr(alg_class, 'rounds_strategy', None)
+    if rounds_strategy:
+        s += """
+Algorithm uses a %s rounds strategy
+HashPW round count = %d (algorithm default = %d)""" % \
+             (rounds_strategy, alg_class.default_rounds, alg_class.vanilla_default_rounds)
+
+    s += "\nHash is at least %d characters long" % alg_class.min_length
+
+    if alg_class.supports_salt:
+        if not issubclass(alg_class, hashpw.structure.BinarySaltedAlgorithm):
+            if alg_class.supports_long_salt:
+                s += "\nHash contains at least %d characters of encoded salt" % alg_class.salt_length
+            else:
+                s += "\nHash contains %d characters of encoded salt" % alg_class.salt_length
+    else:
+        s += "\nAlgorithm does not use a salt; INSECURE!!"
+
+    return s
+
+
+
+def process(mode: str, alg_class: Type, salt: str, settings: Dict, debug: bool = False):
+    try:
+        # Object not function; don't call
+        hasher = create_hasher(alg_class, salt, settings)
+    except errors.ShortSaltException as e:
+        barf(e, EXIT_SHORT_SALT)
+    except errors.SaltPrefixException as e:
+        barf(e, EXIT_SALT_PREFIX)
+    except errors.InvalidArgException as e:
+        barf(e, EXIT_BAD_OPTION)
+    except errors.RoundException as e:
+        if debug:
+            logging.exception(e)
+        barf(e, EXIT_ROUNDS)
+    except ImportError as e:
+        barf("Cannot find required algorithm handler: %s" % (e,), EXIT_MISSING_HANDLER)
+
+    password = read_password()
+
+    # hash password
+    try:
+        if not settings['verify']:
+            print(make_hash(hasher, password))   ## .decode('ascii'))
+        else:
+            # verify mode (would have barfed by now if there was no salt)
+            if make_hash(hasher, password) == salt:
+                if not settings['quiet']: print("Verify suceeded.")
+            else:
+                if not settings['quiet']: print("Verify failed!")
+                sys.exit(EXIT_VERIFY_FAILED)       # don't re-use mismatch code
+    except errors.BadAlgException as e:
+        barf(e, EXIT_BAD_ALG)
 
 
 # *** MAINLINE ***
@@ -148,6 +241,7 @@ for a in hashpw.algorithms:
         opt_string += a.option
     alg_names.append(a.name)
 long_mode_map = { a: a for a in alg_names }
+# Algorithm.aliases
 ## long_mode_map['alias'] = 'alg'
 
 
@@ -194,7 +288,7 @@ def main():
             elif optpair[0] == "-r":
                 settings['rounds'] = int(optpair[1])
             elif optpair[0] == "-R":
-                settings['rounds'] = int(math.pow(2, int(optpair[1])))
+                settings['rounds'] = rounds_log_convert(optpair[1])
             elif optpair[0] == "-V":
                 special = 'version'
             elif optpair[0] == "-I":
@@ -209,7 +303,7 @@ def main():
             elif optpair[0][2:] == 'rounds':
                 settings['rounds'] = int(optpair[1])
             elif optpair[0][2:] == 'rounds-log':
-                settings['rounds'] = int(math.pow(2, int(optpair[1])))
+                settings['rounds'] = rounds_log_convert(optpair[1])
             elif optpair[0][2:] == 'version':
                 special = 'version'
             elif optpair[0][2:] == 'info':
@@ -223,14 +317,6 @@ def main():
     alg_class = None
 
     # -- argument handling --
-    if special:
-        if special == 'version':
-            print(program_name, "v%s" % hashpw.__version__, "by", hashpw.__author__)
-        elif special == 'info':
-            pass
-
-        sys.exit(EXIT_OK)
-
     # handle a salt if one was supplied
     if len(args) > 0:
         salt = args[0]
@@ -246,6 +332,8 @@ def main():
     if not mode:
         mode = DEFAULT_MODE
 
+    # If the Algorithm subclass was not recognised by a salt/hash, use a
+    # command-line option or the default mode to set it
     if not alg_class:
         # determine algorithm
         for a in hashpw.algorithms:
@@ -256,52 +344,18 @@ def main():
             barf("mode " + mode + " not found", EXIT_MISSING_MODE)
 
     # == sanity checking ==
+    if settings['verify'] and special:
+        barf("Incompatible options supplied", EXIT_CMDLINE_BAD)
     if settings['verify'] and not hashpw.recognise_algorithm_by_hash(alg_class, salt):
         barf("Verify mode requires a full hash to check against", EXIT_VERIFY_PARTIAL_HASH)
 
     # == processing ==
-    try:
-        # Object not function; don't call
-        hasher = create_hasher(alg_class, salt, settings)
-    except errors.ShortSaltException as e:
-        barf(e, EXIT_SHORT_SALT)
-    except errors.SaltPrefixException as e:
-        barf(e, EXIT_SALT_PREFIX)
-    except errors.InvalidArgException as e:
-        barf(e, EXIT_BAD_OPTION)
-    except errors.RoundException as e:
-        if debug:
-            logging.exception(e)
-        barf(e, EXIT_ROUNDS)
-    except ImportError as e:
-        barf("Cannot find required algorithm handler: %s" % (e,), EXIT_MISSING_HANDLER)
-
-    # TODO: Check for stdin not a tty and read that instead
-    try:
-        # get two password(s)
-        pw1 = getpass.getpass()
-        if not settings['verify']:
-            pw2 = getpass.getpass("Re-enter password: ")
-            # compare them and if they don't match, report an error
-            if pw1 != pw2:
-                barf("Passwords do not match", EXIT_PASSWORD_MISMATCH)
-            else:
-                if pw1 == "":
-                    print(program_name + ":", "warning: password is blank!!", file=sys.stderr)
-    except KeyboardInterrupt:
-        print("^C", file=sys.stderr)
-        sys.exit(EXIT_OK)
-
-    # hash password
-    try:
-        if not settings['verify']:
-            print(make_hash(hasher, pw1))   ## .decode('ascii'))
+    if special:
+        if special == 'version':
+            print(program_name, "v%s" % hashpw.__version__, "by", hashpw.__author__)
+        elif special == 'info':
+            print(get_class_info(alg_class))
         else:
-            # verify mode (would have barfed by now if there was no salt)
-            if make_hash(hasher, pw1) == salt:
-                if not settings['quiet']: print("Verify suceeded.")
-            else:
-                if not settings['quiet']: print("Verify failed!")
-                sys.exit(EXIT_VERIFY_FAILED)       # don't re-use mismatch code
-    except errors.BadAlgException as e:
-        barf(e, EXIT_BAD_ALG)
+            barf("Unsupported special operation", EXIT_UNSUPPORTED)
+    else:
+        process(mode, alg_class, salt, settings, debug)

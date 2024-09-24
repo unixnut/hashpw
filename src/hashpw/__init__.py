@@ -1,8 +1,8 @@
 """Top-level package for Universal password hash generator and verifier"""
-                                  
+
 __author__ = """Alastair Irvine"""
 __email__ = 'alastair@plug.org.au'
-__version__ = '2.5.0'
+__version__ = '2.6.0'
 
 
 from typing import Set, Dict, Sequence, Tuple, List, Union, AnyStr, Iterable, Callable, Generator, Type, Optional, TextIO, IO
@@ -57,7 +57,7 @@ def identify_salt(salt: str) -> Optional[Tuple[str, Type]]:
         if recognise_algorithm(a, salt):
             # mode, alg_class
             return a.name, a
-    
+
 
 def init(settings: Dict):
     global recognise_algorithm

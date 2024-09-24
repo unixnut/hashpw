@@ -5,6 +5,8 @@ from ..structure import Algorithm
 
 
 class MySqlSHA1(Algorithm):
+    """MySQL v4.1+ PASSWORD"""
+
     name = "mysql-sha-1"
     option = "p"
     prefix = "*"

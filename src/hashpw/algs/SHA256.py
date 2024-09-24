@@ -4,6 +4,8 @@ from ..structure import SaltedAlgorithm
 
 
 class SHA256(SaltedAlgorithm):
+    """Unix SHA256 crypt"""
+
     name = "sha-256"
     option = "2"
     prefix = "$5$"
