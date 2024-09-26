@@ -114,12 +114,18 @@ class SaltedAlgorithm(Algorithm):
 
     # This can't be a @classmethod because it has to work with subclass properties
     @staticmethod
-    def init(c, **kwargs):
+    def init(c, *, comp_extra: int = 0, **kwargs: Dict):
+        """
+        Sets up derived properties for classes that handle salts.
+
+        @p comp_extra is the number of chars for the round count, etc.
+        """
+
         super().init(c, **kwargs)
-        c.comp_len = len(c.prefix) + c.salt_length + len(c.suffix)
+        c.comp_len = len(c.prefix) + comp_extra + c.salt_length + len(c.suffix)
 
 
-    def __init__(self, salt):
+    def __init__(self, salt: str):
         # Note that unlike SaltedAlgorithm, Algorithm's constructor doesn't take
         # an argument
         super().__init__()
@@ -131,27 +137,27 @@ class SaltedAlgorithm(Algorithm):
 
 
     @classmethod
-    def recognise_full(c, s):
+    def recognise_full(c, s: str):
         """Returns whether or not @p s matches this algorithm's encoding format"""
         return len(s) >= c.min_length and c.recognise_salt_internal(s)
 
 
     @classmethod
-    def recognise_salt_internal(c, s):
+    def recognise_salt_internal(c, s: str):
         """Returns whether or not @p s matches the leading part of this
         algorithm's encoding format"""
         return s[:len(c.prefix)] == c.prefix
 
 
     @classmethod
-    def recognise_salt(c, s):
+    def recognise_salt(c, s: str):
         """Returns whether or not @p s matches the leading part of this
         algorithm's encoding format and is long enough to contain a salt."""
         return c.recognise_salt_internal(s) and len(s) >= c.comp_len
 
 
     @classmethod
-    def generate_salt(c, raw_byte_count=12, *, padding_byte=None):
+    def generate_salt(c, raw_byte_count: int = 12, *, padding_byte=None):
         """Calculate an encoded salt string, including prefix, for algorithm @p c ."""
 
         salt = c.prefix + c.generate_raw_salt(raw_byte_count, padding_byte=padding_byte)[:c.salt_length] + c.suffix
@@ -160,7 +166,7 @@ class SaltedAlgorithm(Algorithm):
 
 
     @classmethod
-    def generate_raw_salt(c, raw_byte_count=12, *, padding_byte=None):
+    def generate_raw_salt(c, raw_byte_count: int = 12, *, padding_byte=None):
         """Calculate a base64-encoded salt string.  @p raw_byte_count can be up to 16."""
 
         # make a salt consisting of 96 bits of random data, packed into a
@@ -175,7 +181,7 @@ class SaltedAlgorithm(Algorithm):
 
 
     @classmethod
-    def extract_salt(c, s):
+    def extract_salt(c, s: str):
         """Takes the prefix-plus-salt from the argument."""
         logging.debug("string = %s", s)
         c.check_salt(s)
@@ -192,7 +198,7 @@ class SaltedAlgorithm(Algorithm):
 
 
     @classmethod
-    def check_salt(c, salt):
+    def check_salt(c, salt: str):
         """
         Checks that the supplied salt conforms to the required format of the
         current mode.
@@ -205,7 +211,7 @@ class SaltedAlgorithm(Algorithm):
             raise errors.SaltPrefixException("supplied salt should start with " + c.prefix)
 
 
-    def hash(self, plaintext):
+    def hash(self, plaintext: str):
         """Returns an encoded hash"""
 
         return_value = crypt.crypt(plaintext, self.salt)
@@ -228,13 +234,13 @@ class BinarySaltedAlgorithm(SaltedAlgorithm):
 
     # This can't be a @classmethod because it has to work with subclass properties
     @staticmethod
-    def init(c, **kwargs):
+    def init(c, **kwargs: Dict):
         """Ensure that check_salt() checks the length of the whole hash."""
         c.comp_len = c.min_length
 
 
     @classmethod
-    def generate_salt(c):
+    def generate_salt(c: str):
         """Calculates a binary salt string for algorithm @p c ."""
 
         if c.salt_length > 8:
@@ -247,7 +253,7 @@ class BinarySaltedAlgorithm(SaltedAlgorithm):
 
 
     @classmethod
-    def extract_salt(c, hash):
+    def extract_salt(c, hash: str):
         """Takes the prefix-plus-salt from the argument and if valid, decodes it."""
         c.check_salt(hash)
 
@@ -276,7 +282,7 @@ class PLSaltedAlgorithm(SaltedAlgorithm):
     Class is required to set `self.hasher` in `__init__()`.
     """
 
-    def hash(self, plaintext):
+    def hash(self, plaintext: str):
         """
         Make a hash using 'passlib' (unlike parent that uses 'crypt').
 

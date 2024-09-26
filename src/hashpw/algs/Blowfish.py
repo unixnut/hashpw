@@ -11,7 +11,7 @@ class Blowfish(SaltedAlgorithm):
     prefix = "$2a$"
     suffix = ""
     min_length = 60
-    salt_length = 29
+    salt_length = 22
     encoded_digest_length = 31
     rounds_strategy = 'logarithmic'
     default_rounds = 12   # 13 was too high (nearly a second on a Intel Core i5-4300U CPU @ 1.90GHz)
@@ -22,7 +22,8 @@ class Blowfish(SaltedAlgorithm):
     @staticmethod
     def init(c, **kwargs: Dict):
         c.set_rounds(extra_args=kwargs)
-        super().init(c, **kwargs)
+        # 2 round count chars and a $ delimiter
+        super().init(c, comp_extra=3, **kwargs)
 
 
     @classmethod

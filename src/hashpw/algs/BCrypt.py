@@ -15,7 +15,8 @@ class BCrypt(PLSaltedAlgorithm):
     prefix = "$2b$"
     suffix = ""
     min_length = 60
-    salt_length = 29
+    salt_prefix_len = len(prefix) + 3  # round chars and delimiter
+    salt_length = 22
     encoded_digest_length = 31
     rounds_strategy = 'logarithmic'
     default_rounds = 12   # 13 was too high (nearly a second on a Intel Core i5-4300U CPU @ 1.90GHz)
@@ -26,7 +27,8 @@ class BCrypt(PLSaltedAlgorithm):
     @staticmethod
     def init(c, **kwargs: Dict):
         c.set_rounds(extra_args=kwargs)
-        super().init(c, **kwargs)
+        # 2 round count chars and a $ delimiter
+        super().init(c, comp_extra=3, **kwargs)
 
 
     @classmethod
@@ -49,15 +51,13 @@ class BCrypt(PLSaltedAlgorithm):
         return s
 
 
-    def __init__(self, salt, ident=None):
-        super().__init__(salt)
-
-        startidx = len(self.prefix) + 3
-        endidx   = self.salt_length
+    def bcrypt_prep(self, salt: str, token_offset: int = 0) -> Tuple[Dict, int, int]:
+        startidx = self.salt_prefix_len
+        endidx   = self.comp_len
         if salt:
             # This salt might not match the values set by init()
             tokens = salt.split("$")
-            rounds   = int(tokens[2])
+            rounds   = int(tokens[2+token_offset])
             logging.debug("Parsing salt: len(s)=%d, comp_len=%d, salt_length=%d, rounds=%d",
                           len(salt), startidx + endidx + len(self.suffix),
                           self.salt_length, rounds)
@@ -67,12 +67,20 @@ class BCrypt(PLSaltedAlgorithm):
 
         info = { 'salt':   salt[startidx:endidx],
                  'rounds': rounds }
-        if ident:
-            info['ident'] = "2y"
-        logging.debug("Hashing with salt '%s' (startidx=%d, endidx=%d) and %d rounds",
-                      info['salt'], startidx, endidx, rounds)
 
-        self.hasher = passlib.hash.bcrypt.using(**info)
+        return info, startidx, endidx
+
+
+    def __init__(self, salt, ident=None, *, token_offset: int = 0, passlib_alg: Type = passlib.hash.bcrypt):
+        super().__init__(salt)
+
+        info, startidx, endidx = self.bcrypt_prep(salt, token_offset)
+        if ident:
+            info['ident'] = ident  # E.g. "2y"
+        logging.debug("Hashing with salt '%s' (startidx=%d, endidx=%d) and %d rounds",
+                      info['salt'], startidx, endidx, info['rounds'])
+
+        self.hasher = passlib_alg.using(**info)
 
 
 class BCryptVariant(BCrypt):

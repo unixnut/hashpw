@@ -10,6 +10,7 @@ with open('README.md') as readme_file:
     readme = readme_file.read()
                 
 requirements = ['bcrypt==4.0.1',  # See https://github.com/pyca/bcrypt/issues/684
+                'argon2_cffi',
                 'passlib']
 
 setup(

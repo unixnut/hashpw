@@ -34,11 +34,11 @@ class PBKDF2(PLSaltedAlgorithm):
             c.salt_length = 12
 
         c.set_rounds(extra_args=kwargs)
-        PLSaltedAlgorithm.init(c, **kwargs)
 
         # Count the fixed chars plus the number of digits
-        c.salt_prefix_len = 15 + math.ceil(math.log10(c.rounds))  # E.g. 21 for pbkdf2_sha256$260000$
-        c.comp_len = c.salt_prefix_len + c.salt_length + len(c.suffix)
+        n = 1 + math.ceil(math.log10(c.rounds)) + 1  # E.g. 8 for pbkdf2_sha256$260000$
+        c.salt_prefix_len = len(c.prefix) + n
+        PLSaltedAlgorithm.init(c, comp_extra=n, **kwargs)
 
 
     @classmethod

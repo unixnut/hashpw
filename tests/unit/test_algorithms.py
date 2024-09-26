@@ -330,5 +330,16 @@ class TestLDAPv2SSHA512(AlgorithmSaltedMixin, unittest.TestCase):
         cls.alg_class = hashpw.LDAPv2SSHA512
 
 
+class TestDjangoBcryptSHA256(AlgorithmSaltedMixin, unittest.TestCase):
+    """Tests for DjangoBcryptSHA256 algorithm."""
+
+    foobie_bletch_hash = "bcrypt_sha256$$2b$12$6l6SZYrhUZVbSmEiI5x1Ae04/jwehlXR0rzBWZYWetXp7BVjQMH3i"
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.alg_class = hashpw.DjangoBcryptSHA256
+
+
 if __name__ == '__main__':
     unittest.main()

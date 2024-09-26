@@ -15,7 +15,9 @@ from .algs.BasicMD5 import BasicMD5
 from .algs.Blowfish import Blowfish
 from .algs.BCrypt import BCrypt, BCryptVariant
 from .algs.Crypt import Crypt
+from .algs.DjangoBcryptSHA256 import DjangoBcryptSHA256, DjangoBcryptSHA256Orig
 from .algs.ExtDes import ExtDes
+from .algs.HTTPBasic import HTTPBasic
 from .algs.LDAPv2SMD5 import LDAPv2SMD5
 from .algs.LDAPv2SSHA256 import LDAPv2SSHA256
 from .algs.LDAPv2SSHA512 import LDAPv2SSHA512
@@ -32,7 +34,7 @@ from .algs.SSHA import SSHA
 
 # *** DEFINITIONS ***
 # Algorithms with longer prefixes need to appear earlier in this list
-algorithms = (PBKDF2, ApacheMD5, ApacheSHA1, LDAPv2SSHA256, LDAPv2SSHA512, LDAPv2SMD5, SSHA, BCrypt, BCryptVariant, Blowfish, MD5, SHA256, SHA512, MySqlSHA1, Phpass, PhpBB3, BasicMD5, ExtDes, Crypt, OldPassword)
+algorithms = (DjangoBcryptSHA256, DjangoBcryptSHA256Orig, PBKDF2, LDAPv2SSHA256, LDAPv2SSHA512, LDAPv2SMD5, ApacheMD5, ApacheSHA1, SSHA, BCrypt, BCryptVariant, Blowfish, MD5, SHA256, SHA512, Phpass, PhpBB3, MySqlSHA1, BasicMD5, ExtDes, Crypt, OldPassword, HTTPBasic)
 
 
 # *** FUNCTIONS ***
@@ -54,6 +56,7 @@ def recognise_algorithm_by_salt(algorithm, s):
 
 def identify_salt(salt: str) -> Optional[Tuple[str, Type]]:
     for a in algorithms:
+        logging.debug("Checking %s against %s's %s", salt, a.name, a.prefix)
         if recognise_algorithm(a, salt):
             # mode, alg_class
             return a.name, a

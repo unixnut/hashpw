@@ -14,6 +14,7 @@ usage = """Usage: hashpw [ -e ] [ -c | -C | -m | -a | -A | -b | -2 [ -l ] | -5 [
   -q  Don't print verification result (exit codes only; 0 = suceeded, 2 = failed)
   -r <rounds>  Set round count
   -R <rounds>  Set logarithmic round count
+  -u <username>
 
 Algorithm options:
   -m  Unix MD5 crypt (default)
@@ -24,6 +25,14 @@ Algorithm options:
   -y  blowfish A.K.A. BCrypt (variant "$2y$" prefix used by BSD)
   -a  Apache MD5
   -A  Apache SHA-1 (RFC 2307; can be used by OpenLDAP) (does not use a salt; INSECURE!!)
+  -z  Argon2i: preferred for password hashing and password-based key derivation [UNIMPLEMENTED]
+  --argon2d    Argon2d: faster but only suitable for applications with no
+               threats from side-channel timing attacks [UNIMPLEMENTED]
+  --argon2id   Argon2id: a hybrid with some resistance to side-channel cache
+               timing attacks and good resistance to GPU cracking attacks. [UNIMPLEMENTED]
+  -s  BCrypt+SHA256 [UNIMPLEMENTED]
+  -f  Fairly Secure Hashed Password [UNIMPLEMENTED]
+  -g  Grub’s PBKDF2 Hash [UNIMPLEMENTED]
   -2  SHA-256
   -5  SHA-512 (Linux standard password hashing method)
   -L  LDAPv2 salted MD5 digest
@@ -34,8 +43,21 @@ Algorithm options:
   -p  MySQL v4.1+ PASSWORD() double SHA-1 (does not use a salt; INSECURE!!)
   -M  MySQL MD5() -- just hex encoding (does not use a salt; INSECURE!!)
   -d  PBKDF2 with Django prefix
+  --django-bcrypt-sha256  Django 1.6’s Bcrypt+SHA256
   -P  Portable PHP password hashing framework, as used by WordPress
   -B  phpBB3: Same as -P except the hash starts with "$H$" instead of "$P$"
+  -H  HTTP basic (VERY INSECURE!!!)
+  -C  CRAM-MD5 (does not use a salt; INSECURE!!) [UNIMPLEMENTED]
+  -D  DIGEST-MD5 (requires username) [UNIMPLEMENTED]
+  -1  SCRAM-SHA-1 (RFC 5802; see https://en.wikipedia.org/wiki/Salted_Challenge_Response_Authentication_Mechanism) [UNIMPLEMENTED]
+  --pbkdf2-sha1 [UNIMPLEMENTED]
+  --pbkdf2-sha256 [UNIMPLEMENTED]
+  --pbkdf2-sha512 [UNIMPLEMENTED]
+
+Argon2 notes:
+     Argon2i uses data-independent memory access to protect from tradeoff attacks
+     Argon2d uses data-depending memory access and so is highly resistant against GPU cracking attacks
+     https://github.com/P-H-C/phc-winner-argon2
 """
 #
 # See http://forum.insidepro.com/viewtopic.php?t=8225 for more algorithms
@@ -114,11 +136,19 @@ def create_hasher(alg_class: Type, salt: str, settings: Dict) -> Algorithm:
     """
 
     if alg_class.supports_salt:
-        return alg_class(salt)
+        if getattr(alg_class, 'takes_username', False):
+            return alg_class(salt, username=settings['username'])
+        else:
+            # TODO: Warn if settings['username'] is non-empty
+            return alg_class(salt)
     else:
         if salt and not settings['verify']:
             print("ignoring salt", file=sys.stderr)
-        return alg_class()
+        if getattr(alg_class, 'takes_username', False):
+            return alg_class(username=settings['username'])
+        else:
+            # TODO: Warn if settings['username'] is non-empty
+            return alg_class()
 
 
 def rounds_log_convert(n: str) -> int:
@@ -258,7 +288,7 @@ def main():
     # -- option handling --
     try:
         (opts, args) = getopt.getopt(sys.argv[1:], opt_string + "lvqhr:R:Ieu:V",
-                                     ['help', 'rounds:', 'rounds-log:', 'username:', 'debug', 'version', 'info'] + list(long_mode_map.keys()))
+                                     ['help', 'rounds=', 'rounds-log=', 'username=', 'debug', 'version', 'info'] + list(long_mode_map.keys()))
     except getopt.GetoptError as e:
         barf(e, EXIT_CMDLINE_BAD)
 
@@ -293,6 +323,8 @@ def main():
                 special = 'version'
             elif optpair[0] == "-I":
                 special = 'info'
+            elif optpair[0] == "-u":
+                settings['username'] = optpair[1]
         else:
             # long option
             if optpair[0][2:] in long_mode_map:
@@ -308,6 +340,8 @@ def main():
                 special = 'version'
             elif optpair[0][2:] == 'info':
                 special = 'info'
+            elif optpair[0][2:] == 'username':
+                settings['username'] = optpair[1]
 
     # -- pre-preparation --
     try:
