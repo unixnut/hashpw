@@ -14,6 +14,7 @@ usage = """Usage: hashpw [ -e ] [ -c | -C | -m | -a | -A | -b | -2 [ -l ] | -5 [
   -q  Don't print verification result (exit codes only; 0 = suceeded, 2 = failed)
   -r <rounds>  Set round count
   -R <rounds>  Set logarithmic round count
+  -r 0         Restore default round count (probably INSECURE)
   -u <username>
 
 Algorithm options:
@@ -25,14 +26,14 @@ Algorithm options:
   -y  blowfish A.K.A. BCrypt (variant "$2y$" prefix used by BSD)
   -a  Apache MD5
   -A  Apache SHA-1 (RFC 2307; can be used by OpenLDAP) (does not use a salt; INSECURE!!)
-  -z  Argon2i: preferred for password hashing and password-based key derivation [UNIMPLEMENTED]
+  -z  Argon2i: preferred for password hashing and password-based key derivation
   --argon2d    Argon2d: faster but only suitable for applications with no
-               threats from side-channel timing attacks [UNIMPLEMENTED]
+               threats from side-channel timing attacks
   --argon2id   Argon2id: a hybrid with some resistance to side-channel cache
-               timing attacks and good resistance to GPU cracking attacks. [UNIMPLEMENTED]
+               timing attacks and good resistance to GPU cracking attacks.
   -s  BCrypt+SHA256 [UNIMPLEMENTED]
   -f  Fairly Secure Hashed Password [UNIMPLEMENTED]
-  -g  Grub’s PBKDF2 Hash [UNIMPLEMENTED]
+  -g  Grub’s PBKDF2 Hash
   -2  SHA-256
   -5  SHA-512 (Linux standard password hashing method)
   -L  LDAPv2 salted MD5 digest
@@ -44,9 +45,11 @@ Algorithm options:
   -M  MySQL MD5() -- just hex encoding (does not use a salt; INSECURE!!)
   -d  PBKDF2 with Django prefix
   --django-bcrypt-sha256  Django 1.6’s Bcrypt+SHA256
+  --scrypt  SCrypt key derivation function (either INSECURE or inefficient)
+  -Y  YesCrypt format Linux password hash
   -P  Portable PHP password hashing framework, as used by WordPress
   -B  phpBB3: Same as -P except the hash starts with "$H$" instead of "$P$"
-  -H  HTTP basic (VERY INSECURE!!!)
+  -H  HTTP basic (requires username) (VERY INSECURE!!!)
   -C  CRAM-MD5 (does not use a salt; INSECURE!!) [UNIMPLEMENTED]
   -D  DIGEST-MD5 (requires username) [UNIMPLEMENTED]
   -1  SCRAM-SHA-1 (RFC 5802; see https://en.wikipedia.org/wiki/Salted_Challenge_Response_Authentication_Mechanism) [UNIMPLEMENTED]
@@ -223,22 +226,27 @@ HashPW round count = %d (algorithm default = %d)""" % \
 
 
 
-def process(mode: str, alg_class: Type, salt: str, settings: Dict, debug: bool = False):
-    try:
-        # Object not function; don't call
-        hasher = create_hasher(alg_class, salt, settings)
-    except errors.ShortSaltException as e:
-        barf(e, EXIT_SHORT_SALT)
-    except errors.SaltPrefixException as e:
-        barf(e, EXIT_SALT_PREFIX)
-    except errors.InvalidArgException as e:
-        barf(e, EXIT_BAD_OPTION)
-    except errors.RoundException as e:
-        if debug:
-            logging.exception(e)
-        barf(e, EXIT_ROUNDS)
-    except ImportError as e:
-        barf("Cannot find required algorithm handler: %s" % (e,), EXIT_MISSING_HANDLER)
+def process(mode: str, alg_class: Type, salt: Optional[str], settings: Dict, debug: bool = False):
+    if settings['verify'] and hasattr(alg_class, 'verify'):
+        verify_fn = alg_class.verify
+        hasher = None
+    else:
+        try:
+            # Object not function; don't call
+            hasher = create_hasher(alg_class, salt, settings)
+            verify_fn = lambda password, salt: make_hash(hasher, password) == salt
+        except errors.ShortSaltException as e:
+            barf(e, EXIT_SHORT_SALT)
+        except errors.SaltPrefixException as e:
+            barf(e, EXIT_SALT_PREFIX)
+        except errors.InvalidArgException as e:
+            barf(e, EXIT_BAD_OPTION)
+        except errors.RoundException as e:
+            if debug:
+                logging.exception(e)
+            barf(e, EXIT_ROUNDS)
+        except ImportError as e:
+            barf("Cannot find required algorithm handler: %s" % (e,), EXIT_MISSING_HANDLER)
 
     password = read_password()
 
@@ -248,7 +256,7 @@ def process(mode: str, alg_class: Type, salt: str, settings: Dict, debug: bool =
             print(make_hash(hasher, password))   ## .decode('ascii'))
         else:
             # verify mode (would have barfed by now if there was no salt)
-            if make_hash(hasher, password) == salt:
+            if verify_fn(password, salt):
                 if not settings['quiet']: print("Verify suceeded.")
             else:
                 if not settings['quiet']: print("Verify failed!")
@@ -366,7 +374,7 @@ def main():
     if not mode:
         mode = DEFAULT_MODE
 
-    # If the Algorithm subclass was not recognised by a salt/hash, use a
+    # If the Algorithm subclass was not recognised from a salt/hash, use a
     # command-line option or the default mode to set it
     if not alg_class:
         # determine algorithm
@@ -386,9 +394,14 @@ def main():
     # == processing ==
     if special:
         if special == 'version':
+            ## importlib.metadata.version('hashpw')
             print(program_name, "v%s" % hashpw.__version__, "by", hashpw.__author__)
         elif special == 'info':
             print(get_class_info(alg_class))
+
+            if salt and hasattr(alg_class, 'analyse_hash'):
+                hasher = create_hasher(alg_class, salt, settings)
+                print(hasher.analyse_hash())
         else:
             barf("Unsupported special operation", EXIT_UNSUPPORTED)
     else:

@@ -18,7 +18,7 @@ class LDAPv2SSHA512(BinarySaltedAlgorithm):
     prefix = "{SSHA512}"
     suffix = ""
     min_length = 105
-    salt_length = 8
+    salt_length = 8    # doesn't include prefix or params
     digest_length = 64
 
 

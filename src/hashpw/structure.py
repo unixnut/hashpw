@@ -1,5 +1,6 @@
 from typing import Set, Dict, Sequence, Tuple, List, Union, AnyStr, Iterable, Callable, Generator, Type, Optional, TextIO, IO
 
+import base64
 import crypt
 import logging
 import math
@@ -13,6 +14,12 @@ from . import utils
 class Algorithm(object):
     supports_salt = False
     rounds_strategy = None
+    option = None
+
+
+    @staticmethod
+    def rounds_to_logarithmic(rounds: int):
+        return math.ceil(math.log2(rounds))
 
 
     # This can't be a @classmethod because it has to work with subclass properties
@@ -58,14 +65,14 @@ class Algorithm(object):
             rounds = False
 
         # rounds can have one of three kinds of value:
-        #   integer > 0 passed on command-line
+        #   integer > 0 (linear value) passed on command-line
         #   integer == 0 passed on command-line
         #   False default from settings, which is a defaultdict(bool); CAREFUL: will compare equal with 0
         if rounds:
             if c.rounds_strategy == 'logarithmic':
-                c.rounds = math.ceil(math.log2(rounds))
+                c.rounds = c.rounds_to_logarithmic(rounds)
             elif c.rounds_strategy == 'numeric':
-                c.rounds = rounds
+                c.rounds = int(rounds)
             else:
                 # Invalid value that will trip the constructor check
                 c.rounds = -1
@@ -118,7 +125,7 @@ class SaltedAlgorithm(Algorithm):
         """
         Sets up derived properties for classes that handle salts.
 
-        @p comp_extra is the number of chars for the round count, etc.
+        @param comp_extra    The number of chars for the round count, etc.
         """
 
         super().init(c, **kwargs)
@@ -131,43 +138,67 @@ class SaltedAlgorithm(Algorithm):
         super().__init__()
 
         if salt:
-            self.salt = self.extract_salt(salt)
+            self.salt, params = self.get_salt_info(salt)
+            if params:
+                # Reset parameters in case they are different in the supplied hash
+                ## if self.supports_long_salt:
+                ##     # extract_salt() will still work even if the salt_length is too short for this hash
+                ##     self.init(long_salt=self.long_salt, {})
+                ## else:
+                ##     ...
+                pass
+            else:
+                params = self.get_default_params()
+
+            self.init(self.__class__, **params)
+            logging.debug("Info after extracting salt: len(s)=%d, c.comp_len=%d, c.salt_length=%d",
+                          len(self.salt), self.comp_len, self.salt_length)
         else:
             self.salt = self.generate_salt()
 
 
     @classmethod
-    def recognise_full(c, s: str):
+    def recognise_full(c, s: str) -> bool:
         """Returns whether or not @p s matches this algorithm's encoding format"""
         return len(s) >= c.min_length and c.recognise_salt_internal(s)
 
 
     @classmethod
-    def recognise_salt_internal(c, s: str):
+    def recognise_salt_internal(c, s: str) -> bool:
         """Returns whether or not @p s matches the leading part of this
         algorithm's encoding format"""
         return s[:len(c.prefix)] == c.prefix
 
 
     @classmethod
-    def recognise_salt(c, s: str):
+    def recognise_salt(c, s: str) -> bool:
         """Returns whether or not @p s matches the leading part of this
         algorithm's encoding format and is long enough to contain a salt."""
         return c.recognise_salt_internal(s) and len(s) >= c.comp_len
 
 
     @classmethod
-    def generate_salt(c, raw_byte_count: int = 12, *, padding_byte=None):
-        """Calculate an encoded salt string, including prefix, for algorithm @p c ."""
+    def generate_salt(c, raw_byte_count: int = 12, **kwargs) -> str:
+        """
+        Calculate an encoded salt string, including prefix, for algorithm @p c .
+        Removes base64 padding characters (1 or 2 "=") if c.salt_length doesn't
+        allow for them.
+        """
 
-        salt = c.prefix + c.generate_raw_salt(raw_byte_count, padding_byte=padding_byte)[:c.salt_length] + c.suffix
+        salt = c.prefix + c.generate_raw_salt(raw_byte_count, **kwargs)[:c.salt_length] + c.suffix
 
         return salt
 
 
     @classmethod
-    def generate_raw_salt(c, raw_byte_count: int = 12, *, padding_byte=None):
-        """Calculate a base64-encoded salt string.  @p raw_byte_count can be up to 16."""
+    def generate_raw_salt(c, raw_byte_count: int = 12, *, padding_byte=None, base64_default: bool = False) -> str:
+        """
+        Calculate a base64-encoded salt string.
+
+        @param raw_byte_count  Can be up to 16
+        @param padding_byte    Needed if the the last salt charactor must be a predictable value
+        @param base64_default  Use standard base64 characters "a-zA-Z0-9+/" instead of the password alphabet "a-zA-Z0-9./"
+        """
 
         # make a salt consisting of 96 bits of random data, packed into a
         # string, encoded using a variant of base-64 encoding
@@ -175,19 +206,32 @@ class SaltedAlgorithm(Algorithm):
             rand_bits = struct.pack('<QQ', c.r.getrandbits(64), c.r.getrandbits(64))[:raw_byte_count] + padding_byte
         else:
             rand_bits = struct.pack('<QQ', c.r.getrandbits(64), c.r.getrandbits(64))[:raw_byte_count]
-        salt = utils.base64encode(rand_bits)
+        if base64_default:
+            salt = base64.b64encode(rand_bits).decode('ascii')
+        else:
+            salt = utils.base64encode(rand_bits)
 
         return salt
 
 
     @classmethod
-    def extract_salt(c, s: str):
+    def extract_salt(c, s: str) -> str:
+        """
+        Takes the prefix-plus-salt from the argument.  Can be safely overridden.
+        """
+
+        return c.extract_salt_only(s)
+
+
+    @classmethod
+    def extract_salt_only(c, s: str) -> str:
         """Takes the prefix-plus-salt from the argument."""
-        logging.debug("string = %s", s)
+
+        ## logging.debug("string = %s", s)
         c.check_salt(s)
 
         if c.supports_long_salt:
-            logging.debug("Extracting salt: len(s)=%d, c.comp_len=%d, c.salt_length=%d",
+            logging.debug("About to extract salt: len(s)=%d, c.comp_len=%d, c.salt_length=%d",
                            len(s), c.comp_len, c.salt_length)
             # Ensure it isn't a short salt indicated by presence of delimiter sooner
             if len(s) > c.comp_len and s[c.comp_len-1] != c.suffix:
@@ -195,6 +239,21 @@ class SaltedAlgorithm(Algorithm):
                 return s[:c.comp_len+c.salt_length]
 
         return s[:c.comp_len]
+
+
+    @classmethod
+    def get_salt_info(c, s: str) -> Tuple[str, Dict]:
+        """
+        Extract a full salt string and a mapping of information about it (called the
+        parameters) from a hash or existing full salt string.
+        """
+
+        return c.extract_salt_only(s), {}
+
+
+    @classmethod
+    def get_default_params(c) -> Dict:
+        return {}
 
 
     @classmethod
@@ -211,14 +270,17 @@ class SaltedAlgorithm(Algorithm):
             raise errors.SaltPrefixException("supplied salt should start with " + c.prefix)
 
 
-    def hash(self, plaintext: str):
+    def hash(self, plaintext: str) -> str:
         """Returns an encoded hash"""
 
         return_value = crypt.crypt(plaintext, self.salt)
 
         # Check that the hash starts with the salt; otherwise, crypt(3) might
         # not understand the algorithm implied by the salt format
-        if self.extract_salt(return_value) != self.salt:
+        logging.debug("Hash result: %s", return_value)
+        output_salt = self.extract_salt(return_value)
+        if not self.salt.startswith(output_salt):
+            logging.debug("salt extracted from output: %s (input salt/hash: %s)", output_salt, self.salt)
             raise errors.BadAlgException(self.name + " hashing does not appear to be supported on this platform")
 
         return return_value
@@ -240,7 +302,7 @@ class BinarySaltedAlgorithm(SaltedAlgorithm):
 
 
     @classmethod
-    def generate_salt(c: str):
+    def generate_salt(c: str) -> bytes:
         """Calculates a binary salt string for algorithm @p c ."""
 
         if c.salt_length > 8:
@@ -248,12 +310,23 @@ class BinarySaltedAlgorithm(SaltedAlgorithm):
         else:
             rand_bits = struct.pack('<Q', c.r.getrandbits(64))
         salt = rand_bits[:c.salt_length]
+        ## print(type(salt))
 
         return salt
 
 
     @classmethod
-    def extract_salt(c, hash: str):
+    def get_salt_info(c, s: str) -> Tuple[str, Dict]:
+        """
+        Extract a binary salt and a mapping of information about it (called the
+        parameters) from a hash.
+        """
+
+        return c.extract_salt(s), {}
+
+
+    @classmethod
+    def extract_salt(c, hash: str) -> bytes:
         """Takes the prefix-plus-salt from the argument and if valid, decodes it."""
         c.check_salt(hash)
 
@@ -264,31 +337,11 @@ class BinarySaltedAlgorithm(SaltedAlgorithm):
         return bits[c.digest_length:]
 
 
-    def generic_hash(self, alg_fn: Type, plaintext: str):
-        """Returns an encoded hash using a given basic hashing algorithm"""
+    def generic_hash(self, alg_fn: Type, plaintext: str) -> str:
+        """Returns an encoded, salted hash using a given basic hashing algorithm"""
 
         input_byte_str = plaintext.encode("UTF-8")
         context = alg_fn(input_byte_str)
         context.update(self.salt)
         output_byte_str = context.digest()
         return self.prefix + utils.base64encode(output_byte_str + self.salt)
-
-
-
-class PLSaltedAlgorithm(SaltedAlgorithm):
-    """
-    Specific class for algorithms that use passlib.
-
-    Class is required to set `self.hasher` in `__init__()`.
-    """
-
-    def hash(self, plaintext: str):
-        """
-        Make a hash using 'passlib' (unlike parent that uses 'crypt').
-
-        Doesn't use PasswordHash.hash_password() because that generates its
-        own salt.  Instead, use the internal function that is used when
-        PasswordHash.portable_hashes is true.
-        """
-
-        return self.hasher.hash(plaintext)

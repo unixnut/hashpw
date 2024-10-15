@@ -1,5 +1,6 @@
 from typing import Set, Dict, Sequence, Tuple, List, Union, AnyStr, Iterable, Callable, Generator, Type, Optional, TextIO, IO
 
+import binascii
 import logging
 import math
 
@@ -9,36 +10,30 @@ import passlib.utils
 from ..extra_structure import PLSaltedAlgorithm
 
 
-class PBKDF2(PLSaltedAlgorithm):
-    """PBKDF2 with Django prefix"""
+class GrubPBKDF2SHA512(PLSaltedAlgorithm):
+    """Grub’s PBKDF2 SHA512 Hash"""
 
-    name = "django-pbkdf2"
-    aliases = ("django-pbkdf2-sha256",)
-    option = "d"
-    prefix = "pbkdf2_sha256"
-    suffix = "$"
-    min_length = 70     # prefix + '$' + rounds(at least 2 chars) + '$' + salt + '$' + 44 chars
-    supports_long_salt = True
+    name = "grub-pbkdf2"
+    option = "g"
+    prefix = "grub.pbkdf2.sha512"
+    suffix = "."
+    min_length = 281     # prefix + '.' + rounds(at least 2 chars) + '.' + salt + '.' + 128 chars
+    salt_length = 128    # doesn't include prefix or params
+    encoded_digest_length = 128
     rounds_strategy = 'numeric'
-    default_rounds = 500000
-    vanilla_default_rounds = 29000
+    default_rounds = 350000
+    vanilla_default_rounds = 19000
 
-    # Example: pbkdf2_sha256$250000$sENX0bGHYNvD$KZ7cHVogLq80TiiYrYx6C19gIFikf9ekV08mFaG2+lE=
 
     # This can't be a @classmethod because parent classes have to work with its properties
     @staticmethod
-    def init(c, *, long_salt: bool = False, **kwargs: Dict):
+    def init(c, **kwargs: Dict):
         """Ensure that check_salt() checks the length of the whole hash."""
-
-        if long_salt:
-            c.salt_length = 16
-        else:
-            c.salt_length = 12
 
         c.set_rounds(extra_args=kwargs)
 
         # Count the fixed chars plus the number of digits
-        n = 1 + math.ceil(math.log10(c.rounds)) + 1  # E.g. 8 for pbkdf2_sha256$260000$
+        n = 1 + math.ceil(math.log10(c.rounds)) + 1  # E.g. 8 for grub.pbkdf2.sha512.260000.
         c.salt_prefix_len = len(c.prefix) + n
         PLSaltedAlgorithm.init(c, comp_extra=n, **kwargs)
 
@@ -51,10 +46,11 @@ class PBKDF2(PLSaltedAlgorithm):
         [Override]
         """
 
-        salt_chars = passlib.utils.getrandstr(passlib.utils.rng,
-                                              passlib.hash.django_pbkdf2_sha256.salt_chars,
-                                              c.salt_length)
-        s = "%s$%d$%s$" % (c.prefix, c.rounds, salt_chars)
+        binary_salt = passlib.utils.getrandstr(passlib.utils.rng,
+                                               passlib.hash.grub_pbkdf2_sha512.salt_chars,
+                                               c.salt_length // 2)
+        salt_chars = binascii.hexlify(binary_salt).decode('ascii')
+        s = "%s.%d.%s." % (c.prefix, c.rounds, salt_chars)
         return s
 
 
@@ -63,23 +59,25 @@ class PBKDF2(PLSaltedAlgorithm):
 
         if salt:
             # This salt might not match the values set by init()
-            tokens = salt.split("$")
-            salt_length = len(tokens[2])
-            startidx = len(self.prefix) + 1 + len(tokens[1]) + 1
+            tokens = salt.split(".")
+            salt_length = len(tokens[4])
+            startidx = len(self.prefix) + 1 + len(tokens[3]) + 1
             endidx   = startidx + salt_length
-            rounds   = int(tokens[1])
+            rounds   = int(tokens[3])
             logging.debug("Parsing salt: len(s)=%d, comp_len=%d, salt_length=%d, rounds=%d",
                           len(salt), startidx + salt_length + len(self.suffix),
                           salt_length, rounds)
         else:
-            ## print(self.salt[self.salt_prefix_len:])
+            ## print(self.salt[:self.salt_prefix_len])
             startidx = self.salt_prefix_len
-            endidx   = self.salt_prefix_len + self.salt_length
+            endidx   = self.comp_len - len(self.suffix)
             rounds   = self.rounds
             salt     = self.salt
 
-        info = { 'salt':   salt[startidx:endidx], ## salt[startidx:-1],
+
+        ## print(type(salt), type(salt[startidx:endidx])
+        info = { 'salt':   binascii.unhexlify(salt[startidx:endidx]),
                  'rounds': rounds }
         logging.debug("Hashing with salt '%s' (startidx=%d, endidx=%d) and %d rounds",
                       info['salt'], startidx, endidx, rounds)
-        self.hasher = passlib.hash.django_pbkdf2_sha256.using(**info)
+        self.hasher = passlib.hash.grub_pbkdf2_sha512.using(**info)

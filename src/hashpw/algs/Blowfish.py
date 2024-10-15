@@ -11,7 +11,7 @@ class Blowfish(SaltedAlgorithm):
     prefix = "$2a$"
     suffix = ""
     min_length = 60
-    salt_length = 22
+    salt_length = 22    # doesn't include prefix or params; not including "==" needed to decode base64
     encoded_digest_length = 31
     rounds_strategy = 'logarithmic'
     default_rounds = 12   # 13 was too high (nearly a second on a Intel Core i5-4300U CPU @ 1.90GHz)

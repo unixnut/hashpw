@@ -12,7 +12,7 @@ class SSHA(BinarySaltedAlgorithm):
     prefix = "{SSHA}"
     suffix = ""
     min_length = 38
-    salt_length = 4
+    salt_length = 4      # in raw bytes
     digest_length = 20
 
 

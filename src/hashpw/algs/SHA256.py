@@ -1,9 +1,9 @@
 from typing import Set, Dict, Sequence, Tuple, List, Union, AnyStr, Iterable, Callable, Generator, Type, Optional, TextIO, IO
 
-from ..structure import SaltedAlgorithm
+from ..extra_structure import PHCSaltedAlgorithm
 
 
-class SHA256(SaltedAlgorithm):
+class SHA256(PHCSaltedAlgorithm):
     """Unix SHA256 crypt"""
 
     name = "sha-256"
@@ -14,6 +14,9 @@ class SHA256(SaltedAlgorithm):
     min_length = 55
     encoded_digest_length = 43
     supports_long_salt = True
+    rounds_strategy = 'numeric'
+    default_rounds = 650000
+    vanilla_default_rounds = 5000
 
 
     # This can't be a @classmethod because parent classes have to work with its properties
@@ -23,4 +26,5 @@ class SHA256(SaltedAlgorithm):
             c.salt_length = 16
         else:
             c.salt_length = 8
-        SaltedAlgorithm.init(c, **kwargs)
+
+        PHCSaltedAlgorithm.init(c, **kwargs)

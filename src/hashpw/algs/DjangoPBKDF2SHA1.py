@@ -9,21 +9,20 @@ import passlib.utils
 from ..extra_structure import PLSaltedAlgorithm
 
 
-class PBKDF2(PLSaltedAlgorithm):
+class DjangoPBKDF2SHA1(PLSaltedAlgorithm):
     """PBKDF2 with Django prefix"""
 
-    name = "django-pbkdf2"
-    aliases = ("django-pbkdf2-sha256",)
-    option = "d"
-    prefix = "pbkdf2_sha256"
+    name = "django-pbkdf2-sha1"
+    option = None
+    prefix = "pbkdf2_sha1"
     suffix = "$"
-    min_length = 70     # prefix + '$' + rounds(at least 2 chars) + '$' + salt + '$' + 44 chars
+    min_length = 56     # prefix + '$' + rounds(at least 2 chars) + '$' + salt + '$' + 28 chars
+    encoded_digest_length = 28
     supports_long_salt = True
     rounds_strategy = 'numeric'
-    default_rounds = 500000
+    default_rounds = 800000
     vanilla_default_rounds = 29000
 
-    # Example: pbkdf2_sha256$250000$sENX0bGHYNvD$KZ7cHVogLq80TiiYrYx6C19gIFikf9ekV08mFaG2+lE=
 
     # This can't be a @classmethod because parent classes have to work with its properties
     @staticmethod
@@ -52,7 +51,7 @@ class PBKDF2(PLSaltedAlgorithm):
         """
 
         salt_chars = passlib.utils.getrandstr(passlib.utils.rng,
-                                              passlib.hash.django_pbkdf2_sha256.salt_chars,
+                                              passlib.hash.django_pbkdf2_sha1.salt_chars,
                                               c.salt_length)
         s = "%s$%d$%s$" % (c.prefix, c.rounds, salt_chars)
         return s
@@ -82,4 +81,4 @@ class PBKDF2(PLSaltedAlgorithm):
                  'rounds': rounds }
         logging.debug("Hashing with salt '%s' (startidx=%d, endidx=%d) and %d rounds",
                       info['salt'], startidx, endidx, rounds)
-        self.hasher = passlib.hash.django_pbkdf2_sha256.using(**info)
+        self.hasher = passlib.hash.django_pbkdf2_sha1.using(**info)

@@ -9,7 +9,7 @@ class ExtDes(SaltedAlgorithm):
     prefix = "_"
     suffix = ""
     min_length = 20
-    salt_length = 8
+    salt_length = 8    # doesn't include prefix
 
 
     ## @classmethod

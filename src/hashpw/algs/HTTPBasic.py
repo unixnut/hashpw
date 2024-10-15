@@ -13,7 +13,7 @@ class HTTPBasic(Algorithm):
     option = "H"
     prefix = ""
     suffix = ""
-    min_length = 5
+    min_length = 4
     takes_username = True
 
 

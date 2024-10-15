@@ -4,7 +4,7 @@ import logging
 
 import passlib.hash
 
-from ..structure import PLSaltedAlgorithm
+from ..extra_structure import PLSaltedAlgorithm
 
 
 class BCrypt(PLSaltedAlgorithm):
@@ -16,7 +16,7 @@ class BCrypt(PLSaltedAlgorithm):
     suffix = ""
     min_length = 60
     salt_prefix_len = len(prefix) + 3  # round chars and delimiter
-    salt_length = 22
+    salt_length = 22    # doesn't include prefix or params; not including "==" needed to decode base64
     encoded_digest_length = 31
     rounds_strategy = 'logarithmic'
     default_rounds = 12   # 13 was too high (nearly a second on a Intel Core i5-4300U CPU @ 1.90GHz)
@@ -32,9 +32,10 @@ class BCrypt(PLSaltedAlgorithm):
 
 
     @classmethod
-    def generate_salt(c):
+    def generate_salt(c) -> str:
         """
         Calculates an encoded salt string, including prefix, for this algorithm.
+        This doesn't include base64 padding characters (2 "=").
 
         [Override]
         """
@@ -43,11 +44,12 @@ class BCrypt(PLSaltedAlgorithm):
         # plus add bits before encoding so that 22 chars (which encodes more
         # than 128 bits actually used) always has a predictable value in the last char.
         # See "Padding Bits" in https://passlib.readthedocs.io/en/stable/lib/passlib.hash.bcrypt.html#deviations
-        salt_chars = super().generate_raw_salt(raw_byte_count=16, padding_byte=b'\xE0')
+        salt_chars = c.generate_raw_salt(raw_byte_count=16, padding_byte=b'\xE0')
         ## salt_chars = passlib.utils.getrandstr(passlib.utils.rng,
         ##                                       passlib.hash.bcrypt.salt_chars,
         ##                                       c.salt_length)
-        s = "%s%d$%s" % (c.prefix, c.rounds, salt_chars)
+        logging.debug("Generated salt, len(s)=%d: %s", len(salt_chars), salt_chars)
+        s = "%s%d$%s" % (c.prefix, c.rounds, salt_chars[:c.salt_length])
         return s
 
 
@@ -71,7 +73,7 @@ class BCrypt(PLSaltedAlgorithm):
         return info, startidx, endidx
 
 
-    def __init__(self, salt, ident=None, *, token_offset: int = 0, passlib_alg: Type = passlib.hash.bcrypt):
+    def __init__(self, salt, ident: Optional[str] = None, *, token_offset: int = 0, passlib_alg: Type = passlib.hash.bcrypt):
         super().__init__(salt)
 
         info, startidx, endidx = self.bcrypt_prep(salt, token_offset)

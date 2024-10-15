@@ -44,7 +44,7 @@ setup(
     packages=find_packages('src'),
     package_dir={'': 'src'},
     url='https://github.com/unixnut/hashpw',
-    version="2.6.0",
+    version="2.7.0",
     zip_safe=False,
 )
 

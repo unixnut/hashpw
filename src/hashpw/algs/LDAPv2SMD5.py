@@ -18,7 +18,7 @@ class LDAPv2SMD5(BinarySaltedAlgorithm):
     prefix = "{SMD5}"
     suffix = ""
     min_length = 34
-    salt_length = 4
+    salt_length = 4      # in raw bytes
     digest_length = 16
 
 

@@ -5,7 +5,7 @@ import logging
 import passlib.hash
 import passlib.utils.binary
 
-from ..structure import PLSaltedAlgorithm
+from ..extra_structure import PLSaltedAlgorithm
 from .. import errors
 
 

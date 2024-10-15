@@ -23,3 +23,9 @@ class InvalidArgException(Exception):
 
 class RoundException(Exception):
     pass
+
+class Yescrypt64StringReaderException(RuntimeError):
+    pass
+
+class Yescrypt64StringWriterException(RuntimeError):
+    pass

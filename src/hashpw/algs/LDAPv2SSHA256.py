@@ -18,7 +18,7 @@ class LDAPv2SSHA256(BinarySaltedAlgorithm):
     prefix = "{SSHA256}"
     suffix = ""
     min_length = 65
-    salt_length = 8
+    salt_length = 8      # in raw bytes
     digest_length = 32
 
 

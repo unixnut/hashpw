@@ -1,6 +1,6 @@
 import passlib.hash
 
-from ..structure import PLSaltedAlgorithm
+from ..extra_structure import PLSaltedAlgorithm
 
 
 class ApacheMD5(PLSaltedAlgorithm):
@@ -9,7 +9,7 @@ class ApacheMD5(PLSaltedAlgorithm):
     prefix = "$apr1$"
     suffix = ""
     min_length = 37
-    salt_length = 8
+    salt_length = 8    # doesn't include prefix or params
 
 
     def __init__(self, salt):
