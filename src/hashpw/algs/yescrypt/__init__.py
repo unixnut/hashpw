@@ -1,9 +1,11 @@
 from typing import Set, Dict, Sequence, Tuple, List, Union, AnyStr, Iterable, Callable, Generator, Type, Optional, TextIO, IO
 
+import copy
 import logging
 import math
 import random
 
+from ... import errors
 from ...structure import SaltedAlgorithm
 from .YescryptSettings import YescryptParams
 from .YescryptSettings import N2log2
@@ -25,7 +27,8 @@ class YesCrypt(SaltedAlgorithm):
     salt_length = 22    # doesn't include prefix or params; not including "==" needed to decode base64
     encoded_digest_length = 43
     rounds_strategy = 'logarithmic'
-    default_rounds = 14
+    default_rounds = 15
+    params = { 'block_size': 32, 'parallelism': 2, 'time_factor': 5 }
     vanilla_default_rounds = 12
 
 
@@ -38,7 +41,7 @@ class YesCrypt(SaltedAlgorithm):
         """
 
         c.set_rounds(extra_args=kwargs)
-        if 'params' in kwargs:
+        if 'params' in kwargs and kwargs['params']:
             c.set_other_params(kwargs['params'])
 
         n = 4  # params chars (minimum) and delimiter
@@ -70,7 +73,9 @@ class YesCrypt(SaltedAlgorithm):
         logging.debug("Generated salt, len(s)=%d: %s", len(salt_chars), salt_chars)
         # Format: see https://unix.stackexchange.com/a/724514
 
-        params = { 'N': int(math.pow(2, c.rounds)), 't': 4 }
+        ## user_params = copy.copy(c.get_default_params())
+        params = { 'N': int(math.pow(2, c.rounds)), 'r': c.params['block_size'],
+                   'p': c.params['parallelism'], 't': c.params['time_factor'] }
         encoded_params = str(YescryptParams(**params))
         s = "%s%s$%s%s" % (c.prefix, encoded_params, salt_chars, c.suffix)
         logging.debug("Full salt, len(s)=%d: %s", len(s), s)
@@ -121,7 +126,10 @@ class YesCrypt(SaltedAlgorithm):
         """YesCrypt params parsing"""
 
         params = YescryptParams.decode(s)
-        return { 'rounds': c.rounds_to_logarithmic(params.N) }
+        return { 'rounds': c.rounds_to_logarithmic(params.N),
+                 'block_size': params.r,
+                 'parallelism': params.p,
+                 'time_factor': params.t }
 
 
     @classmethod
@@ -130,8 +138,17 @@ class YesCrypt(SaltedAlgorithm):
 
 
     @classmethod
-    def set_other_params(c) -> Dict:
-        pass
+    def set_other_params(c, p: Dict) -> Dict:
+        local_p = copy.copy(p)
+        for param in ('block_size', 'parallelism', 'time_factor'):
+            try:
+                val = local_p.pop(param)
+                c.params[param] = int(val)
+            except KeyError:
+                pass
+        # Check if any elements weren't popped
+        if local_p:
+            raise errors.InvalidArgException("Unknown parameter name '%s'" % next(iter(p.keys())))
 
 
     ## @classmethod

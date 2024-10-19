@@ -26,16 +26,6 @@ class PHCSaltedAlgorithm(SaltedAlgorithm):
         raise NotImplementedError
 
 
-    @staticmethod
-    def parse_params(s: str) -> Dict:
-        def kvsplit(s: str) -> Tuple[str, str]:
-            """Returns a key and one value (which may include equals signs)."""
-            return s.split("=", 1)
-
-        # Build a dict from a sequence of 2-tuples
-        return dict(kvsplit(param) for param in s.split(","))
-
-
     # This can't be a @classmethod because parent classes have to work with its properties
     @staticmethod
     def init(c, **kwargs: Dict):
@@ -140,6 +130,23 @@ class PHCSaltedAlgorithm(SaltedAlgorithm):
             return c.get_salt_info_internal(s, tokens)
         else:
             raise ValueError("Hash does not start with " + c.prefix)
+
+
+    @classmethod
+    def parse_params(c, s: str) -> Dict:
+        """
+        Split out comma-separated key-value pairs into a dict.
+
+        This is a classmethod for consistency with other classes where it has
+        to be.
+        """
+
+        def kvsplit(s: str) -> Tuple[str, str]:
+            """Returns a key and one value (which may include equals signs)."""
+            return s.split("=", 1)
+
+        # Build a dict from a sequence of 2-tuples
+        return dict(kvsplit(param) for param in s.split(","))
 
 
     @classmethod

@@ -64,13 +64,14 @@ class Algorithm(object):
         except KeyError:
             rounds = False
 
-        # rounds can have one of three kinds of value:
+        # rounds can have one of several kinds of value:
+        #   string extracted from salt
         #   integer > 0 (linear value) passed on command-line
         #   integer == 0 passed on command-line
         #   False default from settings, which is a defaultdict(bool); CAREFUL: will compare equal with 0
         if rounds:
             if c.rounds_strategy == 'logarithmic':
-                c.rounds = c.rounds_to_logarithmic(rounds)
+                c.rounds = c.rounds_to_logarithmic(int(rounds))
             elif c.rounds_strategy == 'numeric':
                 c.rounds = int(rounds)
             else:

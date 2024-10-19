@@ -79,7 +79,8 @@ def init(settings: Dict):
     # have to do this after option handling but before algorithm recognition
     for a in algorithms:
         logging.debug("Initialising algorithm %s", a.name)
-        a.init(a, long_salt=settings['long_salt'], rounds=settings['rounds'])
+        a.init(a, long_salt=settings['long_salt'],
+               rounds=settings['rounds'], params=settings['params'])
 
 
 # *** MAINLINE ***

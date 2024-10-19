@@ -115,7 +115,7 @@ DEFAULT_MODE = "md5"
 
 # Defaults that can be modified on the command line
 settings = collections.defaultdict(bool)
-settings.update({'verify': False, 'quiet': False})
+settings.update({'verify': False, 'quiet': False, 'params': {}})
 mode = None
 alg_class = None    # this will be determined by scanning properties of the classes
 
@@ -296,7 +296,7 @@ def main():
     # -- option handling --
     try:
         (opts, args) = getopt.getopt(sys.argv[1:], opt_string + "lvqhr:R:Ieu:V",
-                                     ['help', 'rounds=', 'rounds-log=', 'username=', 'debug', 'version', 'info'] + list(long_mode_map.keys()))
+                                     ['help', 'rounds=', 'rounds-log=', 'param=', 'username=', 'debug', 'version', 'info'] + list(long_mode_map.keys()))
     except getopt.GetoptError as e:
         barf(e, EXIT_CMDLINE_BAD)
 
@@ -344,6 +344,13 @@ def main():
                 settings['rounds'] = int(optpair[1])
             elif optpair[0][2:] == 'rounds-log':
                 settings['rounds'] = rounds_log_convert(optpair[1])
+            elif optpair[0][2:] == 'param':
+                try:
+                    k, v = optpair[1].split("=", 1)
+                except ValueError:
+                    # E.g. not enough values to unpack (expected 2, got 1)
+                    barf("Illegal use of --param option", EXIT_CMDLINE_BAD)
+                settings['params'][k] = v
             elif optpair[0][2:] == 'version':
                 special = 'version'
             elif optpair[0][2:] == 'info':

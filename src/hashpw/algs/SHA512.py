@@ -1,7 +1,6 @@
 from typing import Set, Dict, Sequence, Tuple, List, Union, AnyStr, Iterable, Callable, Generator, Type, Optional, TextIO, IO
 
 import logging
-import math
 
 from ..extra_structure import PHCSaltedAlgorithm
 

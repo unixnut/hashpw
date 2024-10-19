@@ -9,6 +9,11 @@ from .utils import B64StringReader, B64StringWriter
 # *** CLASSES ***
 @dataclass
 class YescryptParams:
+    HAVE_PARALLELISM     = 0x01
+    HAVE_TIME_FACTOR     = 0x02
+    HAVE_UPGRADED_COUNT  = 0x04
+    HAVE_NROM            = 0x08
+
     flags: int = YescryptFlags.YESCRYPT_RW_DEFAULTS
     N: int = 4096
     r: int = 32
@@ -63,14 +68,14 @@ class YescryptParams:
         if reader.hasMore():
             have: int = reader.readUint32Min(1)
 
-            if (have & 1) != 0:
+            if (have & context.HAVE_PARALLELISM) != 0:
                 # floor value is 2 because if not present, will default to 1
                 p = reader.readUint32Min(2)
-            if (have & 2) != 0:
+            if (have & context.HAVE_TIME_FACTOR) != 0:
                 t = reader.readUint32Min(1)
-            if (have & 4) != 0:
+            if (have & context.HAVE_UPGRADED_COUNT) != 0:
                 g = reader.readUint32Min(1)
-            if (have & 8) != 0:
+            if (have & context.HAVE_NROM) != 0:
                 raise NotImplementedError("ROM is not supported")
 
         return YescryptParams(flags, N, r, p, t, g, ROM=0)
@@ -108,16 +113,16 @@ class YescryptParams:
         h: int = 0
         if self.p > 1:
             optional_params_writer.writeUint32Min(self.p, 2)
-            h = h | 1
+            h = h | self.HAVE_PARALLELISM
         if self.t > 0:
             optional_params_writer.writeUint32Min(self.t, 1)
-            h = h | 2
+            h = h | self.HAVE_TIME_FACTOR
         if self.g > 0:
             optional_params_writer.writeUint32Min(self.g, 1)
-            h = h | 4
+            h = h | self.HAVE_UPGRADED_COUNT
         if self.ROM > 0:
             optional_params_writer.writeUint32Min(self.ROM, 1)
-            h = h | 8
+            h = h | self.HAVE_NROM
         if h > 0:
             writer.writeUint32Min(h, 1)   # Even the 'have' value is floor-converted
             writer.appendString(str(optional_params_writer))
