@@ -22,8 +22,9 @@ Supported algorithms (hash type identifiers `highlighted`):
   + HTTP basic authentication
   + Grub's PBKDF2 SHA512 (`grub.pbkdf2.sha512`)
   + Django: PBKDF2 (`pbkdf2_sha256`), PBKDF2 SHA1 (`pbkdf2_sha1`), Bcrypt SHA256 (`bcrypt_sha256`), Argon2 (`argon2`)
-  + SCrypt (`$scrypt$`)
+  + passlib's SCrypt (`$scrypt$`)
   + YesCrypt (`$y$`)
+  + YesCrypt old, a.k.a. SCrypt (`$7$`)
 
 Bugs
 ----
@@ -43,3 +44,4 @@ TO-DO
   + Accept password on standard input (without confirmation)
   + Support "doveadm pw" encoding scheme suffixes (.b64, .base64 and .hex); see
     http://wiki2.dovecot.org/Authentication/PasswordSchemes
+  + Support MediaWiki's SHA-512-based secure hash (hash type identifier = `:pbkdf2:sha512:`)

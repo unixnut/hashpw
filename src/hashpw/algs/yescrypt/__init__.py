@@ -7,7 +7,7 @@ import random
 
 from ... import errors
 from ...structure import SaltedAlgorithm
-from .YescryptSettings import YescryptParams
+from .YescryptSettings import YescryptParams, Yescrypt7Params
 from .YescryptSettings import N2log2
 from .YescryptFlags import YescryptFlags
 
@@ -60,17 +60,7 @@ class YesCrypt(SaltedAlgorithm):
         [Override]
         """
 
-        # Use bits and then encode them (instead of randomly generating encoded characters)
-        rand_salt_chars = c.generate_raw_salt(raw_byte_count=16)
-        # For YesCrypt, the salt is actually 132 bits (instead of 128 bits
-        # normally used by algorithms with a 22 char salt, which ignore the
-        # extra 4 bits).  The 6 least significant bits must be one of the
-        # values 110100, 110101, 111110 or 111111.  So change the last char of
-        # the encoded salt (not including base64 padding, which is elided) to
-        # one of the 4 permissible characters to achieve this.
-        char_list = random.sample('01./', 1)
-        salt_chars = rand_salt_chars[:c.salt_length-1] + char_list[0]
-        logging.debug("Generated salt, len(s)=%d: %s", len(salt_chars), salt_chars)
+        salt_chars = c.generate_raw_salt()
         # Format: see https://unix.stackexchange.com/a/724514
 
         ## user_params = copy.copy(c.get_default_params())
@@ -80,6 +70,22 @@ class YesCrypt(SaltedAlgorithm):
         s = "%s%s$%s%s" % (c.prefix, encoded_params, salt_chars, c.suffix)
         logging.debug("Full salt, len(s)=%d: %s", len(s), s)
         return s
+
+
+    @classmethod
+    def generate_raw_salt(c) -> str:
+        # Use bits and then encode them (instead of randomly generating encoded characters)
+        rand_salt_chars = super().generate_raw_salt(raw_byte_count=16)
+        # For YesCrypt, the salt is actually 132 bits (instead of 128 bits
+        # normally used by algorithms with a 22 char salt, which ignore the
+        # extra 4 bits).  The 6 least significant bits must be one of the
+        # values 110100, 110101, 111110 or 111111.  So change the last char of
+        # the encoded salt (not including base64 padding, which is elided) to
+        # one of the 4 permissible characters to achieve this.
+        char_list = random.sample('01./', 1)
+        salt_chars = rand_salt_chars[:c.salt_length-1] + char_list[0]
+        logging.debug("Generated salt, len(s)=%d: %s", len(salt_chars), salt_chars)
+        return salt_chars
 
 
     @classmethod
@@ -97,8 +103,8 @@ class YesCrypt(SaltedAlgorithm):
     @classmethod
     def get_salt_info(c, s: str) -> Tuple[str, Dict]:
         """
-        Extract a full salt string and a mapping of information about it (called the
-        parameters) from a hash.
+        Extract a full salt string (a.k.a. partial hash) and a mapping of
+        information about it (called the parameters) from a hash.
         
         [Override]
         """
@@ -111,10 +117,10 @@ class YesCrypt(SaltedAlgorithm):
                 logging.debug("%d tokens found", len(tokens))
                 if len(tokens) == 5:
                     ## salt = c.build_full_salt(rounds=, salt_chars)
-                    salt = s[:len(c.prefix) + len(tokens[2]) + 1 + c.salt_length + len(c.suffix)]
+                    partial_hash = s[:len(c.prefix) + len(tokens[2]) + 1 + c.salt_length + len(c.suffix)]
                     params = c.parse_params(tokens[2])
 
-                    return salt, params
+                    return partial_hash, params
                 else:
                     raise ValueError("Hash format invalid")
         else:
@@ -138,15 +144,15 @@ class YesCrypt(SaltedAlgorithm):
 
 
     @classmethod
-    def set_other_params(c, p: Dict) -> Dict:
+    def set_other_params(c, p: Dict, allowed_keys: Sequence = ('block_size', 'parallelism', 'time_factor')) -> Dict:
         local_p = copy.copy(p)
-        for param in ('block_size', 'parallelism', 'time_factor'):
+        for param in allowed_keys:
             try:
                 val = local_p.pop(param)
                 c.params[param] = int(val)
             except KeyError:
                 pass
-        # Check if any elements weren't popped
+        # Check if any elements weren't popped and mention the first one
         if local_p:
             raise errors.InvalidArgException("Unknown parameter name '%s'" % next(iter(p.keys())))
 
@@ -155,3 +161,100 @@ class YesCrypt(SaltedAlgorithm):
     ## def check_salt(c, salt: str):
     ##     logging.debug("salt: %s, comp_len=%d", salt, c.comp_len)
     ##     super().check_salt(salt)
+
+
+class YesCrypt7(YesCrypt):
+    """
+    Designed by Solar Designer
+
+    Old format a.k.a. SCrypt (not to be confused with the passlib one)
+    """
+
+    prefix = "$7$"
+    name = "yescrypt7"
+    option = "7"
+    suffix = "$"
+    min_length = 80
+    salt_length = 22    # doesn't include prefix or params; not including "==" needed to decode base64
+    encoded_digest_length = 43
+    rounds_strategy = 'logarithmic'
+    default_rounds = 15
+    params = { 'block_size': 32, 'parallelism': 2 }
+    vanilla_default_rounds = 14
+
+
+    # This can't be a @classmethod because parent classes have to work with its properties
+    @staticmethod
+    def init(c, **kwargs: Dict):
+        """
+        Ensure that check_salt() checks the length of the whole hash.
+        [Override]
+        """
+
+        c.set_rounds(extra_args=kwargs)
+        if 'params' in kwargs and kwargs['params']:
+            c.set_other_params(kwargs['params'], allowed_keys = ('block_size', 'parallelism'))
+
+        n = 11  # params chars (no delimiter)
+        # Number of characters before salt
+        c.salt_prefix_len = len(c.prefix) + n
+
+        # Skip the parent
+        SaltedAlgorithm.init(c, comp_extra=n, **kwargs)
+
+
+    @classmethod
+    def generate_salt(c) -> str:
+        """
+        Calculates an encoded salt string, including prefix, for this algorithm.
+        This doesn't include base64 padding characters (2 "=").
+
+        [Override]
+        """
+
+        salt_chars = c.generate_raw_salt()
+        # Format: see https://unix.stackexchange.com/a/724514
+
+        ## user_params = copy.copy(c.get_default_params())
+        params = { 'N': int(math.pow(2, c.rounds)), 'r': c.params['block_size'],
+                   'p': c.params['parallelism'] }
+        encoded_params = str(Yescrypt7Params(**params))
+        # Note lack of delimiter after params
+        s = "%s%s%s%s" % (c.prefix, encoded_params, salt_chars, c.suffix)
+        logging.debug("Full salt, len(s)=%d: %s", len(s), s)
+        return s
+
+
+    @classmethod
+    def get_salt_info(c, s: str) -> Tuple[str, Dict]:
+        """
+        Extract a full salt string (a.k.a. partial hash) and a mapping of
+        information about it (called the parameters) from a hash.
+        
+        [Override]
+        """
+
+        if c.recognise_salt_internal(s):
+            tokens = s.split("$")
+            logging.debug("%d tokens found", len(tokens))
+            # No delimiter between params and salt chars
+            if len(tokens) == 4:
+                ## salt = c.build_full_salt(rounds=, salt_chars)
+                partial_hash = s[:c.comp_len]
+                params = c.parse_params(tokens[2][:-c.salt_length])
+
+                return partial_hash, params
+            else:
+                raise ValueError("Hash format invalid")
+        else:
+            raise ValueError("Hash does not start with " + c.prefix)
+
+
+    @classmethod
+    def parse_params(c, s: str) -> Dict:
+        """YesCrypt7 params parsing"""
+
+        params = Yescrypt7Params.decode(s)
+        return { 'rounds': c.rounds_to_logarithmic(params.N),
+                 'block_size': params.r,
+                 'parallelism': params.p }

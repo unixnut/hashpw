@@ -13,7 +13,7 @@ import re
 ## from hashpw import hashpw
 import hashpw
 ## from ..scaffolding.algorithms import AlgorithmGenericTests
-from hashpw.algs.yescrypt.YescryptSettings import YescryptParams
+from hashpw.algs.yescrypt.YescryptSettings import YescryptParams, Yescrypt7Params
 from hashpw.algs.yescrypt.YescryptSettings import N2log2
 from hashpw.algs.yescrypt.YescryptFlags import YescryptFlags
 
@@ -98,6 +98,31 @@ class TestYesCrypt(unittest.TestCase):
     def test_decode_jBT1_(self):
         params = YescryptParams.decode_hash('$y$jBT1.$LdJMENpBABJJ3hIHjB1Bi.$')
         expected_params = YescryptParams(N=16384, g=1)
+        self.assertEqual(expected_params, params, msg="params are wrong")
+
+
+
+class TestYesCrypt7(unittest.TestCase):
+    def test_encode_logN14(self):
+        """Default params as used by mkpasswd(1)"""
+
+        t = Yescrypt7Params(N=16384)
+        result = t.encode()
+        self.assertEqual("CU..../....", result, msg="Encoded params are wrong")
+
+    def test_encode_logN15(self):
+        t = Yescrypt7Params(N=32768)
+        result = t.encode()
+        self.assertEqual("DU..../....", result, msg="Encoded params are wrong")
+
+    def test_encode_logN15_p2(self):
+        t = Yescrypt7Params(N=32768, p=2)
+        result = t.encode()
+        self.assertEqual("DU....0....", result, msg="Encoded params are wrong")
+
+    def test_decode(self):
+        params = Yescrypt7Params.decode_hash('$7$CU..../....bUMwNqEOZzE9RqPZH5o9W0$')
+        expected_params = Yescrypt7Params(N=16384)
         self.assertEqual(expected_params, params, msg="params are wrong")
 
 

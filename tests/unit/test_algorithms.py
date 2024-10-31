@@ -503,5 +503,16 @@ class TestYesCrypt(AlgorithmSaltedMixin, unittest.TestCase):
         cls.alg_class = hashpw.YesCrypt
 
 
+class TestYesCrypt7(AlgorithmSaltedMixin, unittest.TestCase):
+    """Tests for YesCrypt algorithm."""
+
+    foobie_bletch_hash = "$7$DU....0....ZPYwbM6PY155RiWHJ1SEU1$4wFVgFwEqIyWNwbpLRs75zR4CM27EbXDXP48vzw8qXA"
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.alg_class = hashpw.YesCrypt7
+
+
 if __name__ == '__main__':
     unittest.main()

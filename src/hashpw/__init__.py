@@ -35,12 +35,12 @@ from .algs.SCrypt import SCrypt
 from .algs.SHA256 import SHA256
 from .algs.SHA512 import SHA512
 from .algs.SSHA import SSHA
-from .algs.yescrypt import YesCrypt
+from .algs.yescrypt import YesCrypt, YesCrypt7
 
 
 # *** DEFINITIONS ***
 # Algorithms with longer prefixes need to appear earlier in this list
-algorithms = (DjangoBcryptSHA256, DjangoBcryptSHA256Orig, GrubPBKDF2SHA512, DjangoArgon2, PBKDF2, DjangoPBKDF2SHA1, Argon2id, Argon2i, Argon2d, LDAPv2SSHA256, LDAPv2SSHA512, SCrypt, LDAPv2SMD5, ApacheMD5, SSHA, ApacheSHA1, BCrypt, BCryptVariant, Blowfish, MD5, SHA256, SHA512, Phpass, PhpBB3, YesCrypt, MySqlSHA1, BasicMD5, ExtDes, Crypt, OldPassword, HTTPBasic)
+algorithms = (DjangoBcryptSHA256, DjangoBcryptSHA256Orig, GrubPBKDF2SHA512, DjangoArgon2, PBKDF2, DjangoPBKDF2SHA1, Argon2id, Argon2i, Argon2d, LDAPv2SSHA256, LDAPv2SSHA512, SCrypt, LDAPv2SMD5, ApacheMD5, SSHA, ApacheSHA1, BCrypt, BCryptVariant, Blowfish, MD5, SHA256, SHA512, Phpass, PhpBB3, YesCrypt, YesCrypt7, MySqlSHA1, BasicMD5, ExtDes, Crypt, OldPassword, HTTPBasic)
 
 
 # *** FUNCTIONS ***

@@ -40,6 +40,10 @@ class YescryptParams:
 
     @classmethod
     def decode(context, s: str): # -> YescryptParams
+        """
+        Extract params from raw string, i.e. not a whole/partial hash
+        """
+
         reader = B64StringReader(s)
 
         # Decode flavor (which fits 10 bits into 8 with a magic algorithm)
@@ -140,6 +144,82 @@ class YescryptParams:
     #    AssertionError: YescryptParams(flags=182, N=16384, r=32, p=1, t=0, g=0, ROM=0) != YescryptParams(flags=182, N=16384, r=32, p=1, t=0, g=1, ROM=0) : params are wrong
     ## def __repr__(self) -> str:
     ##     return "YescryptParams(flags=%03x, N=%d, p=%d, t=%d, g=%d, ROM=%dA)" % (self.flags, self.N, self.r, self.p, self.t, self.g, self.ROM)
+
+
+
+@dataclass
+class Yescrypt7Params:
+    """Old $7$ format."""
+
+    N: int = 4096
+    r: int = 32
+    p: int = 1
+
+
+    @classmethod
+    def decode_hash(context, s: str): # -> YescryptParams
+        parts = s.split('$')
+
+        # check for correct marker prefix
+        if len(parts) != 4:
+            raise ValueError("Invalid encoding. Valid yescrypt encoding should have 4 values separated by '$'")
+
+        # we only support "y" (not "7")
+        if parts[1] != "7":
+            raise ValueError("Unsupported prefix: " + parts[1])
+
+        return context.decode(parts[2])
+
+
+    @classmethod
+    def decode(context, s: str): # -> YescryptParams
+        """
+        Extract params from raw string, i.e. not a whole/partial hash
+        """
+
+        reader = B64StringReader(s)
+
+        # Decode N
+        nlog2: int = reader.readUint32Bits(6)   # Read single encoded byte
+        if nlog2 > 31:
+            raise ValueError("Invalid N.  Nlog2 must be < 32")
+        N: int = 1 << nlog2
+
+        # Decode r
+        r: int = reader.readUint32Bits(30)           # Read 5 encoded bytes
+
+        # Decode p
+        p: int = reader.readUint32Bits(30)           # Read 5 encoded bytes
+
+        return Yescrypt7Params(N, r, p)
+
+
+    def encode(self) -> str:
+        """
+        Encode the params to a string, not including the "$7$" prefix, any
+        delimeters or a salt.
+        """
+
+        writer = B64StringWriter()
+
+        nlog2: int = N2log2(self.N)
+        if nlog2 == 0:
+            raise ValueError("N must be power of 2")
+
+        writer.writeUint32Bits(nlog2, 6)
+
+        if self.r * self.p >= (1 << 30):
+            raise ValueError("Invalid r")
+
+        writer.writeUint32Bits(self.r, 30)
+        writer.writeUint32Bits(self.p, 30)
+
+        return str(writer)
+
+
+    def __str__(self) -> str:
+        return self.encode()
+
 
 
 # *** FUNCTIONS ***
